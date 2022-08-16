@@ -1,0 +1,7 @@
+helfayoumy3
+
+In explanation.txt, explain when we may want to use such nonlinear scales as square root scale and log scale in charts, in no more than 50 words.
+
+Log Scale - shows skewness towards the large values
+Square root scale - normalize a Poisson distribution
+

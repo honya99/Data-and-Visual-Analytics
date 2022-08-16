@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<script type="text/javascript" src="../lib/d3.v5.min.js"></script>
+<script src="https://d3js.org/colorbrewer.v1.min.js"></script>
+
+<style>
+
+path.link {
+  fill: none;
+  stroke: #666;
+  stroke-width: 1.5px;
+}
+
+circle {
+  fill: #ccc;
+  stroke: #fff;
+  stroke: black;
+  stroke-width: 1.5px;
+}
+
+text {
+  fill: #000;
+  font: 10px sans-serif;
+  pointer-events: none;
+}
+
+.topright {
+  position: absolute;
+  top: 8px;
+  right: 16px;
+  font-size: 18px;
+}
+
+</style>
+<html xmlns:mso="urn:schemas-microsoft-com:office:office" xmlns:msdt="uuid:C2F41010-65B3-11d1-A29F-00AA00C14882"><head>
+<!--[if gte mso 9]><xml>
+<mso:CustomDocumentProperties>
+<mso:display_urn_x003a_schemas-microsoft-com_x003a_office_x003a_office_x0023_Editor msdt:dt="string">Hull, Matthew D</mso:display_urn_x003a_schemas-microsoft-com_x003a_office_x003a_office_x0023_Editor>
+<mso:xd_Signature msdt:dt="string"></mso:xd_Signature>
+<mso:Order msdt:dt="string">35500.0000000000</mso:Order>
+<mso:ComplianceAssetId msdt:dt="string"></mso:ComplianceAssetId>
+<mso:TemplateUrl msdt:dt="string"></mso:TemplateUrl>
+<mso:xd_ProgID msdt:dt="string"></mso:xd_ProgID>
+<mso:display_urn_x003a_schemas-microsoft-com_x003a_office_x003a_office_x0023_Author msdt:dt="string">Hull, Matthew D</mso:display_urn_x003a_schemas-microsoft-com_x003a_office_x003a_office_x0023_Author>
+<mso:ContentTypeId msdt:dt="string">0x010100D48F87729E805A4096AD64C4E51DACBE</mso:ContentTypeId>
+<mso:_SourceUrl msdt:dt="string"></mso:_SourceUrl>
+<mso:_SharedFileIndex msdt:dt="string"></mso:_SharedFileIndex>
+</mso:CustomDocumentProperties>
+</xml><![endif]-->
+<title>helfayoumy3</title></head><body>
+    <div class="topright"><h1>helfayoumy3</h1></div>
+<script>
+
+d3.dsv(",", "board_games.csv", function(d) {
+  return {
+    source: d.source,
+    target: d.target,
+    value: +d.value
+  }
+}).then(function(data) {
+
+  var links = data;
+
+  var nodes = {};
+
+  // compute the distinct nodes from the links.
+  links.forEach(function(link) {
+      link.source = nodes[link.source] || (nodes[link.source] = {name: link.source});
+      link.target = nodes[link.target] || (nodes[link.target] = {name: link.target});
+  });
+
+  var width = 1200,
+      height = 700;
+
+  var force = d3.forceSimulation()
+      .nodes(d3.values(nodes))
+      .force("link", d3.forceLink(links).distance(100))
+      .force('center', d3.forceCenter(width / 2, height / 2))
+      .force("x", d3.forceX())
+      .force("y", d3.forceY())
+      .force("charge", d3.forceManyBody().strength(-250))
+      .alphaTarget(1)
+      .on("tick", tick);
+
+  var svg = d3.select("body").append("svg")
+      .attr("width", width)
+      .attr("height", height);
+
+  // add the links
+  var path = svg.append("g")
+      .selectAll("path")
+      .data(links)
+      .enter()
+      .append("path")
+      .attr("class", function(d) { return "link " + d.type; })
+      .style("stroke", function(d){
+        if(d.value < 1) {return ('gray')} 
+        else {return 'green'} 
+        })
+        .attr('stroke-dasharray', function(d) {
+        if(d.value < 1) {
+        return '5, 5';
+        } else {
+        return null; }
+        })
+        .attr("stroke-width", function(d) {
+            if(d.value < 1) {
+                return "3px" ; }
+                else {
+                    return "1px";
+                }
+        });
+
+  // define the nodes
+  var node = svg.selectAll(".node")
+      .data(force.nodes())
+      .enter().append("g")
+      .attr("class", "node")
+      .call(d3.drag()
+          .on("start", dragstarted)
+          .on("drag", dragged)
+          .on("end", dragended))
+          .on("dblclick", releasenode);
+
+  // add the nodes
+  node.append("circle")
+      .attr("r", function(d) {
+         d.weight = links.filter(function(l) {
+           return l.source.index == d.index || l.target.index == d.index
+         }).length;
+         console.log("d weight", d.weight)
+         var minRadius = 10;
+         return minRadius + (d.weight * 2);
+       });
+
+       /* var myColor = d3.scaleSequential().domain([1,10])
+        .interpolator(d3.interpolatePuRd);
+        svg.selectAll(".node").data(force.nodes()).enter().append("circle").attr("fill", function(d){return myColor(d) }) */
+
+
+    node.append("text")
+        .style("font-weight", ("700"))
+        .attr("dx", 12)
+        .attr("dy", ".35em")
+        .text(function(d) { return d.name });
+
+
+/*
+        var dataset = d3.range(9);
+var colorScale = d3.scale.quantize()
+    .range(colorbrewer.YlGnBu[9])
+    .domain([0, 8]);
+
+var svg = d3.select("body")
+    .append("svg");
+
+var circles = svg.selectAll(".nodes")
+    .data(links)
+    .enter()
+    .append("circle");
+
+circles.attr("cy", 50)
+    .attr("cx", function(d) {
+        return 50 + d * 20
+    })
+    .attr("r", 10)
+    .attr("fill", function(d) {
+        return colorScale(d)
+    });
+*/
+
+/*var colorScale = d3.scale.quantize()
+                .domain(extent) // instead of .domain([extent[0], extent[1]])
+                .range(colorbrewer.YlGn[9])
+                .style("fill", function(d)) {
+                    return colorScale(d.properties.pop_max);
+                });
+*/
+
+
+
+  // add the curvy lines
+  function tick() {
+      path.attr("d", function(d) {
+          var dx = d.target.x - d.source.x,
+              dy = d.target.y - d.source.y,
+              dr = Math.sqrt(dx * dx + dy * dy);
+          return "M" +
+              d.source.x + "," +
+              d.source.y + "A" +
+              dr + "," + dr + " 0 0,1 " +
+              d.target.x + "," +
+              d.target.y;
+      });
+
+      node.attr("transform", function(d) {
+          return "translate(" + d.x + "," + d.y + ")"; 
+      });
+  };
+
+  function dragstarted(d) {
+     /* force.stop() */
+     if (!d3.event.active) force.alphaTarget(0.3).restart();
+      d.fx = d.x;
+      d.fy = d.y;
+  };
+
+  function dragged(d) {
+      d.fx = d3.event.x;
+      d.fy = d3.event.y;
+  };
+
+  function dragended(d) {
+      force.alpha(0.3).restart();
+      /* if (!d3.event.active) force.alphaTarget(0); */
+      /* if (d.fixed == true) {
+          d.fx = d.x;
+          d.fy = d.y;
+      }
+      else {
+          d.fx = null;
+          d.fy = null;
+      } */
+      d3.select(this) // node drag color fill
+          .select("circle")
+          .style("fill", "orange");
+  }
+  function releasenode(d){
+      d.fx = undefined;
+      d.fy = undefined;
+  };
+  
+}).catch(function(error) {
+  console.log(error);
+});
+
+</script>
+</body>
+</html>

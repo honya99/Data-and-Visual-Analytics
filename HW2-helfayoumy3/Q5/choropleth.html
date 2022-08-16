@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+
+<head>
+    <!-- add title -->
+
+    <!-- import required libraries here -->
+    <script src="https://d3js.org/d3.v5.js"></script>
+    <script src="https://d3js.org/d3-scale-chromatic.v1.min.js"></script>
+    <script src="https://d3js.org/d3-geo-projection.v2.min.js"></script>
+
+    <style>
+        .tooltip {
+            position: absolute;
+            text-align: center;
+            width: 120px;
+            height: 78px;
+            padding: 2px;
+            font: 12px sans-serif;
+            color: white;
+            background: gray;
+            border: 0px;
+            pointer-events: none;
+        }
+        .position {
+            position: relative;
+        }
+        
+    </style>
+</head>
+
+
+<body>
+    <!-- Add heading for the visualization -->
+    <h2>Average Rating of Board Games Across the World</h2>
+    <p style="position: fixed; bottom: 0; width:100%; text-align: bottom"> helfayoumy3 </p>
+    <!-- Dropdown -->
+    <select id='game-select'>
+    </select>
+
+    <!-- append visualization svg to this div-->
+    <div id="choropleth"></div>
+
+    <script>
+        // enter code to define margin and dimensions for svg
+        var margin = {
+                top: 20,
+                right: 30,
+                bottom: 30,
+                left: 60
+            },
+            width = 600,
+            height = 600;
+
+        // enter code to create svg
+        var svgElement = d3.select("#choropleth").append("svg")
+            .attr("width", width)
+            .attr("height", height)
+            .append("g")
+            .attr("transform",
+                "translate(0,0)");
+
+        // enter code to create color scale
+        var data = d3.map();
+        var colorScale = d3.scaleThreshold()
+            .domain([6, 7.83, 8, 8.39, 10])
+            .range(d3.schemeReds[5]);
+
+        // enter code to define tooltip
+        var div = d3.select("body").append("div")
+            .attr("class", "tooltip")
+            .style("opacity", 0);
+
+        // enter code to define projection and path required for Choropleth
+        var path = d3.geoPath();
+        var projection = d3.geoMercator()
+            .scale(70)
+            .center([0, 20])
+            .translate([width / 2, height / 2]);
+
+        // define any other global variables 
+        var world;
+        var gameData;
+        var games = [];
+
+        Promise.all([
+            // enter code to read files
+            d3.json('world_countries.json'),
+            d3.csv('ratings-by-country.csv')
+
+        ]).then(function(values) {
+            // enter code to call ready() with required arguments
+            world = values[0];
+            gameData = values[1]
+            ready(world, gameData);
+        });
+
+        // this function should be called once the data from files have been read
+        // world: topojson from world_countries.json
+        // gameData: data from ratings-by-country.csv
+
+        function ready(world, gameData) {
+            // enter code to extract all unique games from gameData
+            for (var i in gameData) {
+                if (games.indexOf(gameData[i].Game) === -1) {
+                    games.push(gameData[i].Game);
+                }
+            }
+            games.sort();
+            // enter code to append the game options to the dropdown
+            var select = document.getElementById("game-select");
+            for (var i = 0; i < games.length; i++) {
+                var opt = games[i];
+                var el = document.createElement("option");
+                el.textContent = opt;
+                el.value = opt;
+                select.appendChild(el);
+            }
+            // event listener for the dropdown. Update choropleth and legend when selection changes. Call createMapAndLegend() with required arguments.
+            var selectedGame = games[0];
+
+            function listQ() {
+                selectedGame = document.getElementById("game-select").value;
+                createMapAndLegend(world, gameData, selectedGame);
+            }
+            document.getElementById("game-select").onchange = listQ;
+            // create Choropleth with default option. Call createMapAndLegend() with required arguments. 
+            createMapAndLegend(world, gameData, selectedGame);
+        }
+
+        // this function should create a Choropleth and legend using the world and gameData arguments for a selectedGame
+        // also use this function to update Choropleth and legend when a different game is selected from the dropdown
+        function createMapAndLegend(world, gameData, selectedGame) {
+            var countryData = {};
+            var countryUsers = {};
+            console.log(selectedGame);
+            for (var i in gameData) {
+                if (gameData[i]["Game"] == selectedGame) {
+                    countryData[gameData[i]["Country"]] = +gameData[i]["Average Rating"];
+                    countryUsers[gameData[i]["Country"]] = +gameData[i]["Number of Users"];
+                }
+            }
+            console.log(countryData);
+            svgElement.append("g")
+                .selectAll("path")
+                .data(world.features)
+                .enter()
+                .append("path")
+                // draw each country
+                .attr("d", d3.geoPath()
+                    .projection(projection)
+                )
+                .attr("stroke", "white")
+                // set the color of each country
+                .attr("fill", function(d) {
+                    d.total = countryData[d.properties["name"]] || 0;
+                    if (d.total == 0)
+                        return "gray"
+                    else
+                        return colorScale(d.total);
+                })
+                .on('mouseover', function(d, i) {
+                    div.transition()
+                        .duration(50)
+                        .style("opacity", 1);
+                    let country = d.properties["name"];
+                    let users = countryUsers[d.properties["name"]];
+                    if (users == undefined)
+                        users = 0;
+                    let rating = countryData[d.properties["name"]];
+                    if (rating == undefined)
+                        rating = 0;
+                    div.html("Country: " + country + "<br/>Game: " + selectedGame + "<br/>Avg Rating: " + rating + "<br/>Number of Users: " + users)
+                        .style("left", (d3.event.pageX + 10) + "px")
+                        .style("top", (d3.event.pageY - 15) + "px");
+                })
+                .on('mouseout', function(d, i) {
+                    div.transition()
+                        .duration('50')
+                        .style("opacity", 0);
+                });
+
+            svgElement.append("rect")
+                .attr("x", (width - 105))
+                .attr("y", 50)
+                .attr("fill", "lightsalmon")
+                .attr("width", 10)
+                .attr("height", 10);
+            svgElement.append("text")
+                .attr("x", (width - 90))
+                .attr("y", 60)
+                .text("6.00 to 7.83");
+
+            svgElement.append("rect")
+                .attr("x", (width - 105))
+                .attr("y", 70)
+                .attr("fill", "orangered")
+                .attr("width", 10)
+                .attr("height", 10);
+            svgElement.append("text")
+                .attr("x", (width - 90))
+                .attr("y", 80)
+                .text("7.83 to 8.00");
+
+            svgElement.append("rect")
+                .attr("x", (width - 105))
+                .attr("y", 90)
+                .attr("fill", "crimson")
+                .attr("width", 10)
+                .attr("height", 10);
+            svgElement.append("text")
+                .attr("x", (width - 90))
+                .attr("y", 100)
+                .text("8.00 to 8.39");
+
+            svgElement.append("rect")
+                .attr("x", (width - 105))
+                .attr("y", 110)
+                .attr("fill", "maroon")
+                .attr("width", 10)
+                .attr("height", 10);
+            svgElement.append("text")
+                .attr("x", (width - 90))
+                .attr("y", 120)
+                .text("8.39 to 10.00");
+
+        }
+    </script>
+
+</body>
+
+</html>

@@ -1,0 +1,1680 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+
+<head>
+    <style>
+        /* CSS Styling */
+        
+        .line {
+            fill: none;
+            stroke: #ffab00;
+            stroke-width: 3;
+        }
+        
+        .overlay {
+            fill: none;
+            pointer-events: all;
+        }
+        /* Style the dots by assigning a fill and stroke */
+        
+        .dot {
+            fill: #ffab00;
+            stroke: #fff;
+        }
+        
+        .focus circle {
+            fill: none;
+            stroke: steelblue;
+        }
+        
+        .data-circle {
+            fill: #3C92BA;
+        }
+        .footer{ 
+            position: fixed;     
+            text-align: center;    
+            bottom: 0px; 
+            width: 100%;
+        }  
+    </style>
+</head>
+<!-- Body tag is where we will append our SVG and SVG objects-->
+<div class="footer">helfayoumy3</div>
+
+<body>
+</body>
+
+<!-- Load in the d3 library -->
+<script src="https://unpkg.com/d3@5.16.0/dist/d3.js"></script>
+<script>
+    // set the dimensions and margins of the graph
+    var margin = {
+            top: 20,
+            right: 180,
+            bottom: 50,
+            left: 70
+        },
+        width = 960 - margin.left - margin.right,
+        height = 500 - margin.top - margin.bottom;
+
+    // parse the date / time
+    var parseTime = d3.timeParse("%Y-%m-%d");
+    var formatTime = d3.timeFormat("%b %y")
+
+    // set the ranges
+    var xScale = d3.scaleTime().range([0, width]);
+    //x.ticks(d3.utcMonth.every(5)).map(formatTime)
+
+    var yScale = d3.scaleLinear().range([height, 0]);
+
+    var xAxis = d3.axisBottom()
+        .ticks(7)
+        .scale(xScale);
+
+    var yAxis = d3.axisLeft()
+        .ticks(9)
+        .scale(yScale);
+
+    // Create a line generator
+    var line = d3.line()
+        .x(function(d) {
+            return xScale(d.date);
+        })
+
+    .y(function(d) {
+        return yScale(d.running_total);
+    })
+
+    var xScaleSqRoot = d3.scaleTime().range([0, width]);
+    //x.ticks(d3.utcMonth.every(5)).map(formatTime)
+
+    var yScaleSqRoot = d3.scaleSqrt().range([height, 0]);
+
+    var xAxis = d3.axisBottom()
+        .ticks(7)
+        .scale(xScaleSqRoot);
+
+    var yAxis = d3.axisLeft()
+        .ticks(9)
+        .scale(yScaleSqRoot);
+
+    // Create a line generator
+    var line = d3.line()
+        .x(function(d) {
+            return xScaleSqRoot(d.date);
+        })
+
+    .y(function(d) {
+        return yScaleSqRoot(d.running_total);
+    })
+
+    // set the ranges
+    var xScaleLog = d3.scaleTime().range([0, width]);
+    //x.ticks(d3.utcMonth.every(5)).map(formatTime)
+
+    var yScaleLog = d3.scaleLog().range([height, 0]);
+
+    var xAxisLog = d3.axisBottom()
+        .ticks(7)
+        .scale(xScaleLog);
+
+    var yAxisLogLog = d3.axisLeft()
+        .ticks(9)
+        .scale(yScaleLog);
+
+    // Create a line generator
+    var line = d3.line()
+        .x(function(d) {
+            return xScaleLog(d.date);
+        })
+
+    .y(function(d) {
+        return yScaleLog(d.running_total);
+    })
+
+    var svgElement = d3.select("body").append("svg")
+        .attr("width", width + margin.left + margin.right)
+        .attr("height", height + margin.top + margin.bottom)
+        .append("g")
+        .attr("transform",
+            "translate(" + margin.left + "," + margin.top + ")");
+
+    var nextSvg = d3.select("body").append("svg")
+        .attr("width", width + margin.left + margin.right)
+        .attr("height", height + margin.top + margin.bottom)
+        .append("g")
+        .attr("transform",
+            "translate(" + margin.left + "," + (margin.top + 100 - margin.top - margin.bottom) + ")");
+
+    var i = 0;
+
+    var sqRootSvg = d3.select("body").append("svg")
+        .attr("width", width + margin.left + margin.right)
+        .attr("height", height + margin.top + margin.bottom)
+        .append("g")
+        .attr("transform",
+            "translate(" + margin.left + "," + margin.top + ")");
+
+    var i = 0;
+
+    var logSvg = d3.select("body").append("svg")
+        .attr("width", width + margin.left + margin.right)
+        .attr("height", height + margin.top + margin.bottom)
+        .append("g")
+        .attr("transform",
+            "translate(" + margin.left + "," + (margin.top + 20) + ")");
+
+    var i = 0;
+
+    // Get the data
+    d3.csv("boardgame_ratings.csv").then(function(data) {
+
+        // format the data
+        var counts = [];
+        var close = {};
+        data.forEach(function(d) {
+            d.date = parseTime(d.date);
+            counts.push(d['Catan=count']);
+            counts.push(d['Dominion=count']);
+            counts.push(d['Codenames=count']);
+            counts.push(d['Terraforming Mars=count']);
+            counts.push(d['Gloomhaven=count']);
+            counts.push(d['Magic: The Gathering=count']);
+            counts.push(d['Dixit=count']);
+            counts.push(d['Monopoly=count']);
+            close['Catan'] = d['Catan=count'];
+            close['Dominion'] = d['Dominion=count'];
+            close['Codenames'] = d['Codenames=count'];
+            close['Terraforming Mars'] = d['Terraforming Mars=count'];
+            close['Gloomhaven'] = d['Gloomhaven=count'];
+            close['Magic: The Gathering'] = d['Magic: The Gathering=count'];
+            close['Dixit'] = d['Dixit=count'];
+            close['Monopoly'] = d['Monopoly=count'];
+        });
+
+        // Scale the range of the data
+        xScale.domain(d3.extent(data, function(d) {
+            return d.date;
+        }));
+        yScale.domain([0, d3.max(counts)]);
+
+        var path = svgElement.append("path")
+            .attr("d", line(data));
+
+        // Add the x Axis
+        var xAxis = svgElement.append("g")
+            .attr("transform", "translate(0," + height + ")")
+            .call(d3.axisBottom(xScale)
+                .ticks(d3.timeMonth.every(3))
+                .tickFormat(formatTime));
+
+        // Add the y Axis
+        var yAxis = svgElement.append("g")
+            .call(d3.axisLeft(yScale));
+
+        // Add the lines
+        svgElement.append("path")
+            .datum(data)
+            .attr("fill", "none")
+            .attr("stroke", "steelblue")
+            .attr("stroke-width", 1.5)
+            .attr("d", d3.line()
+                .x(function(d) {
+                    return xScale(d.date)
+                })
+                .y(function(d) {
+                    return yScale(d['Catan=count'])
+                })
+            )
+        svgElement.append("text")
+            .attr("transform", "translate(" + (width + 3) + "," + yScale(close['Catan']) + ")")
+            .attr("dy", ".35em")
+            .attr("text-anchor", "start")
+            .style("fill", "steelblue")
+            .text("Catan");
+
+        svgElement.append("path")
+            .datum(data)
+            .attr("fill", "none")
+            .attr("stroke", "orange")
+            .attr("stroke-width", 1.5)
+            .attr("d", d3.line()
+                .x(function(d) {
+                    return xScale(d.date)
+                })
+                .y(function(d) {
+                    return yScale(d['Dominion=count'])
+                })
+            )
+        svgElement.append("text")
+            .attr("transform", "translate(" + (width + 3) + "," + yScale(close['Dominion']) + ")")
+            .attr("dy", ".35em")
+            .attr("text-anchor", "start")
+            .style("fill", "orange")
+            .text("Dominion");
+
+        svgElement.append("path")
+            .datum(data)
+            .attr("fill", "none")
+            .attr("stroke", "red")
+            .attr("stroke-width", 1.5)
+            .attr("d", d3.line()
+                .x(function(d) {
+                    return xScale(d.date)
+                })
+                .y(function(d) {
+                    return yScale(d['Codenames=count'])
+                })
+            )
+        svgElement.append("text")
+            .attr("transform", "translate(" + (width + 3) + "," + yScale(close['Codenames']) + ")")
+            .attr("dy", ".35em")
+            .attr("text-anchor", "start")
+            .style("fill", "red")
+            .text("Codenames");
+
+        svgElement.append("path")
+            .datum(data)
+            .attr("fill", "none")
+            .attr("stroke", "cyan")
+            .attr("stroke-width", 1.5)
+            .attr("d", d3.line()
+                .x(function(d) {
+                    return xScale(d.date)
+                })
+                .y(function(d) {
+                    return yScale(d['Terraforming Mars=count'])
+                })
+            )
+        svgElement.append("text")
+            .attr("transform", "translate(" + (width + 3) + "," + yScale(close['Terraforming Mars']) + ")")
+            .attr("dy", ".35em")
+            .attr("text-anchor", "start")
+            .style("fill", "cyan")
+            .text("Terraforming Mars");
+
+        svgElement.append("path")
+            .datum(data)
+            .attr("fill", "none")
+            .attr("stroke", "green")
+            .attr("stroke-width", 1.5)
+            .attr("d", d3.line()
+                .x(function(d) {
+                    return xScale(d.date)
+                })
+                .y(function(d) {
+                    return yScale(d['Gloomhaven=count'])
+                })
+            )
+        svgElement.append("text")
+            .attr("transform", "translate(" + (width + 3) + "," + yScale(close['Gloomhaven']) + ")")
+            .attr("dy", ".35em")
+            .attr("text-anchor", "start")
+            .style("fill", "green")
+            .text("Gloomhaven");
+
+        svgElement.append("path")
+            .datum(data)
+            .attr("fill", "none")
+            .attr("stroke", "yellow")
+            .attr("stroke-width", 1.5)
+            .attr("d", d3.line()
+                .x(function(d) {
+                    return xScale(d.date)
+                })
+                .y(function(d) {
+                    return yScale(d['Magic: The Gathering=count'])
+                })
+            )
+        svgElement.append("text")
+            .attr("transform", "translate(" + (width + 3) + "," + yScale(close['Magic: The Gathering']) + ")")
+            .attr("dy", ".35em")
+            .attr("text-anchor", "start")
+            .style("fill", "yellow")
+            .text("Magic: The Gathering");
+
+        svgElement.append("path")
+            .datum(data)
+            .attr("fill", "none")
+            .attr("stroke", "pink")
+            .attr("stroke-width", 1.5)
+            .attr("d", d3.line()
+                .x(function(d) {
+                    return xScale(d.date)
+                })
+                .y(function(d) {
+                    return yScale(d['Dixit=count'])
+                })
+            )
+        svgElement.append("text")
+            .attr("transform", "translate(" + (width + 3) + "," + yScale(close['Dixit']) + ")")
+            .attr("dy", ".35em")
+            .attr("text-anchor", "start")
+            .style("fill", "pink")
+            .text("Dixit");
+
+        svgElement.append("path")
+            .datum(data)
+            .attr("fill", "none")
+            .attr("stroke", "purple")
+            .attr("stroke-width", 1.5)
+            .attr("d", d3.line()
+                .x(function(d) {
+                    return xScale(d.date)
+                })
+                .y(function(d) {
+                    return yScale(d['Monopoly=count'])
+                })
+            )
+        svgElement.append("text")
+            .attr("transform", "translate(" + (width + 3) + "," + yScale(close['Monopoly']) + ")")
+            .attr("dy", ".35em")
+            .attr("text-anchor", "start")
+            .style("fill", "purple")
+            .text("Monopoly");
+
+        //xAxis Label
+        svgElement.append("text")
+            .attr("transform", "translate(" + (width / 2) +
+                " ," + (height - margin.bottom + margin.top + 70) + ")")
+            .text("Month");
+
+        //yAxis Label
+        svgElement.append("text")
+            .attr("transform", "rotate(-90)")
+            .attr("x", (0 - (height / 2)))
+            .attr("y", (0 - margin.left + 15))
+            .text("Num of Ratings");
+
+        svgElement.append("text")
+            .attr("x", (width / 2))
+            .attr("y", 0)
+            .attr("text-anchor", "middle")
+            .attr("font-weight", 700)
+            .text("Number of Ratings 2016-2020");
+
+
+        svgElement.append("text")
+            .attr("x", (width + 30))
+            .attr("y", (height + 10))
+            .style("font-size", "14px")
+
+        svgElement.append("text")
+            .attr("x", (width + 78))
+            .attr("y", (height - 20))
+            .style("font-size", "14px")
+
+        var path = nextSvg.append("path")
+            .attr("d", line(data));
+
+        // Add the x Axis
+        var xAxis = nextSvg.append("g")
+            .attr("transform", "translate(0," + height + ")")
+            .call(d3.axisBottom(xScale)
+                .ticks(d3.timeMonth.every(3))
+                .tickFormat(formatTime));
+
+        // Add the y Axis
+        var yAxis = nextSvg.append("g")
+            .call(d3.axisLeft(yScale));
+
+        // Add the lines
+        nextSvg.append("path")
+            .datum(data)
+            .attr("fill", "none")
+            .attr("stroke", "steelblue")
+            .attr("stroke-width", 1.5)
+            .attr("d", d3.line()
+                .x(function(d) {
+                    return xScale(d.date)
+                })
+                .y(function(d) {
+                    return yScale(d['Catan=count'])
+                })
+            )
+        nextSvg.append("text")
+            .attr("transform", "translate(" + (width + 15) + "," + yScale(close['Catan']) + ")")
+            .attr("dy", ".35em")
+            .attr("text-anchor", "start")
+            .style("fill", "steelblue")
+            .text("Catan");
+
+        nextSvg.append("path")
+            .datum(data)
+            .attr("fill", "none")
+            .attr("stroke", "orange")
+            .attr("stroke-width", 1.5)
+            .attr("d", d3.line()
+                .x(function(d) {
+                    return xScale(d.date)
+                })
+                .y(function(d) {
+                    return yScale(d['Dominion=count'])
+                })
+            )
+        nextSvg.append("text")
+            .attr("transform", "translate(" + (width + 15) + "," + yScale(close['Dominion']) + ")")
+            .attr("dy", ".35em")
+            .attr("text-anchor", "start")
+            .style("fill", "orange")
+            .text("Dominion");
+
+        nextSvg.append("path")
+            .datum(data)
+            .attr("fill", "none")
+            .attr("stroke", "red")
+            .attr("stroke-width", 1.5)
+            .attr("d", d3.line()
+                .x(function(d) {
+                    return xScale(d.date)
+                })
+                .y(function(d) {
+                    return yScale(d['Codenames=count'])
+                })
+            )
+        nextSvg.append("text")
+            .attr("transform", "translate(" + (width + 15) + "," + yScale(close['Codenames']) + ")")
+            .attr("dy", ".35em")
+            .attr("text-anchor", "start")
+            .style("fill", "red")
+            .text("Codenames");
+
+        nextSvg.append("path")
+            .datum(data)
+            .attr("fill", "none")
+            .attr("stroke", "cyan")
+            .attr("stroke-width", 1.5)
+            .attr("d", d3.line()
+                .x(function(d) {
+                    return xScale(d.date)
+                })
+                .y(function(d) {
+                    return yScale(d['Terraforming Mars=count'])
+                })
+            )
+        nextSvg.append("text")
+            .attr("transform", "translate(" + (width + 15) + "," + yScale(close['Terraforming Mars']) + ")")
+            .attr("dy", ".35em")
+            .attr("text-anchor", "start")
+            .style("fill", "cyan")
+            .text("Terraforming Mars");
+
+        nextSvg.append("path")
+            .datum(data)
+            .attr("fill", "none")
+            .attr("stroke", "green")
+            .attr("stroke-width", 1.5)
+            .attr("d", d3.line()
+                .x(function(d) {
+                    return xScale(d.date)
+                })
+                .y(function(d) {
+                    return yScale(d['Gloomhaven=count'])
+                })
+            )
+        nextSvg.append("text")
+            .attr("transform", "translate(" + (width + 15) + "," + yScale(close['Gloomhaven']) + ")")
+            .attr("dy", ".35em")
+            .attr("text-anchor", "start")
+            .style("fill", "green")
+            .text("Gloomhaven");
+
+        nextSvg.append("path")
+            .datum(data)
+            .attr("fill", "none")
+            .attr("stroke", "yellow")
+            .attr("stroke-width", 1.5)
+            .attr("d", d3.line()
+                .x(function(d) {
+                    return xScale(d.date)
+                })
+                .y(function(d) {
+                    return yScale(d['Magic: The Gathering=count'])
+                })
+            )
+        nextSvg.append("text")
+            .attr("transform", "translate(" + (width + 15) + "," + yScale(close['Magic: The Gathering']) + ")")
+            .attr("dy", ".35em")
+            .attr("text-anchor", "start")
+            .style("fill", "yellow")
+            .text("Magic: The Gathering");
+
+        nextSvg.append("path")
+            .datum(data)
+            .attr("fill", "none")
+            .attr("stroke", "pink")
+            .attr("stroke-width", 1.5)
+            .attr("d", d3.line()
+                .x(function(d) {
+                    return xScale(d.date)
+                })
+                .y(function(d) {
+                    return yScale(d['Dixit=count'])
+                })
+            )
+        nextSvg.append("text")
+            .attr("transform", "translate(" + (width + 15) + "," + yScale(close['Dixit']) + ")")
+            .attr("dy", ".35em")
+            .attr("text-anchor", "start")
+            .style("fill", "pink")
+            .text("Dixit");
+
+        nextSvg.append("path")
+            .datum(data)
+            .attr("fill", "none")
+            .attr("stroke", "purple")
+            .attr("stroke-width", 1.5)
+            .attr("d", d3.line()
+                .x(function(d) {
+                    return xScale(d.date)
+                })
+                .y(function(d) {
+                    return yScale(d['Monopoly=count'])
+                })
+            )
+        nextSvg.append("text")
+            .attr("transform", "translate(" + (width + 15) + "," + yScale(close['Monopoly']) + ")")
+            .attr("dy", ".35em")
+            .attr("text-anchor", "start")
+            .style("fill", "purple")
+            .text("Monopoly");
+
+        //xAxis Label
+        nextSvg.append("text")
+            .attr("transform", "translate(" + (width / 2) +
+                " ," + (height - margin.bottom + margin.top + 70) + ")")
+            .text("Month");
+
+        //yAxis Label
+        nextSvg.append("text")
+            .attr("transform", "rotate(-90)")
+            .attr("x", (0 - (height / 2)))
+            .attr("y", (0 - margin.left + 15))
+            .text("Num of Ratings");
+
+        nextSvg.append("text")
+            .attr("x", (width / 2))
+            .attr("y", 0)
+            .attr("text-anchor", "middle")
+            .attr("font-weight", 700)
+            .text("Number of Ratings 2016-2020 with Rankings");
+
+        var lineAndDots = nextSvg.append("g")
+            .attr("class", "line-and-dots")
+            .attr("transform", "translate(0," + 0 + ")")
+
+        var lineAndText = nextSvg.append("g")
+            .attr("class", "line-and-text")
+            .attr("transform", "translate(5," + 0 + ")")
+
+        lineAndDots.selectAll("line-circle")
+            .data(data)
+            .enter().append("circle")
+            .attr("class", "data-circle")
+            .attr("r", 15)
+            .attr("cx", function(d) {
+                if (i == 0) {
+                    i += 1;
+                    return xScale(-10);
+                } else if (i % 3 == 0) {
+                    i += 1;
+                    return xScale(d.date);
+                } else {
+                    i += 1;
+                    return xScale(-10);
+                }
+            })
+            .attr("cy", function(d) {
+                return yScale(d['Catan=count']);
+            });
+
+        lineAndText.selectAll("line-text")
+            .data(data)
+            .enter().append("text")
+            .attr("class", "data-text")
+            .attr("font-size", "12px")
+            .attr("transform", function(d) {
+                if (d['Catan=rank'] > 100)
+                    return "translate(2," + 0 + ")";
+                else if (d['Catan=rank'] < 10)
+                    return "translate(8," + 0 + ")";
+                else
+                    return "translate(6," + 0 + ")";
+            })
+            .attr("x", function(d) {
+                if (i % 3 == 0) {
+                    i += 1;
+                    return xScale(d.date);
+                } else {
+                    i += 1;
+                    return xScale(-10);
+                }
+            })
+            .attr("y", function(d) {
+                return yScale(d['Catan=count']);
+            })
+            .style('fill', 'white')
+            .text(function(d) {
+                return d['Catan=rank'];
+            });
+
+        i = 0;
+
+        lineAndDots.selectAll("line-circle")
+            .data(data)
+            .enter().append("circle")
+            .attr("class", "data-circle")
+            .attr("r", 15)
+            .style('fill', 'red')
+            .attr("cx", function(d) {
+                if (i == 0) {
+                    i += 1;
+                    return xScale(-10);
+                } else if (i % 3 == 0) {
+                    i += 1;
+                    return xScale(d.date);
+                } else {
+                    i += 1;
+                    return xScale(-10);
+                }
+            })
+            .attr("cy", function(d) {
+                return yScale(d['Codenames=count']);
+            });
+
+        lineAndText.selectAll("line-text")
+            .data(data)
+            .enter().append("text")
+            .attr("class", "data-text")
+            .attr("font-size", "12px")
+            .attr("transform", "translate(5," + 0 + ")")
+            .attr("x", function(d) {
+                if (i % 3 == 0) {
+                    i += 1;
+                    return xScale(d.date);
+                } else {
+                    i += 1;
+                    return xScale(-10);
+                }
+            })
+            .attr("y", function(d) {
+                return yScale(d['Codenames=count']);
+            })
+            .style('fill', 'white')
+            .text(function(d) {
+                return d['Codenames=rank'];
+            });
+
+        i = 0;
+
+        lineAndDots.selectAll("line-circle")
+            .data(data)
+            .enter().append("circle")
+            .attr("class", "data-circle")
+            .attr("r", 15)
+            .style('fill', 'cyan')
+            .attr("cx", function(d) {
+                if (i == 0) {
+                    i += 1;
+                    return xScale(-10);
+                } else if (i % 3 == 0) {
+                    i += 1;
+                    return xScale(d.date);
+                } else {
+                    i += 1;
+                    return xScale(-10);
+                }
+            })
+            .attr("cy", function(d) {
+                return yScale(d['Terraforming Mars=count']);
+            });
+
+        lineAndText.selectAll("line-text")
+            .data(data)
+            .enter().append("text")
+            .attr("class", "data-text")
+            .attr("transform", "translate(8," + 0 + ")")
+            .attr("font-size", "12px")
+            .attr("x", function(d) {
+                if (i % 3 == 0) {
+                    i += 1;
+                    return xScale(d.date);
+                } else {
+                    i += 1;
+                    return xScale(-10);
+                }
+            })
+            .attr("y", function(d) {
+                return yScale(d['Terraforming Mars=count']);
+            })
+            .style('fill', 'white')
+            .text(function(d) {
+                return d['Terraforming Mars=rank'];
+            });
+
+        i = 0;
+
+        lineAndDots.selectAll("line-circle")
+            .data(data)
+            .enter().append("circle")
+            .attr("class", "data-circle")
+            .attr("r", 15)
+            .style('fill', 'green')
+            .attr("cx", function(d) {
+                if (i == 0) {
+                    i += 1;
+                    return xScale(-10);
+                } else if (i % 3 == 0) {
+                    i += 1;
+                    return xScale(d.date);
+                } else {
+                    i += 1;
+                    return xScale(-10);
+                }
+            })
+            .attr("cy", function(d) {
+                return yScale(d['Gloomhaven=count']);
+            });
+
+        lineAndText.selectAll("line-text")
+            .data(data)
+            .enter().append("text")
+            .attr("class", "data-text")
+            .attr("font-size", "12px")
+            .attr("transform", function(d) {
+                if (d['Gloomhaven=rank'] > 100)
+                    return "translate(0," + 0 + ")";
+                else if (d['Gloomhaven=rank'] < 10)
+                    return "translate(8," + 0 + ")";
+                else
+                    return "translate(6," + 0 + ")";
+            })
+            .attr("x", function(d) {
+                if (i % 3 == 0) {
+                    i += 1;
+                    return xScale(d.date);
+                } else {
+                    i += 1;
+                    return xScale(-10);
+                }
+            })
+            .attr("y", function(d) {
+                return yScale(d['Gloomhaven=count']);
+            })
+            .style('fill', 'white')
+            .text(function(d) {
+                return d['Gloomhaven=rank'];
+            });
+
+        nextSvg.append("circle")
+            .attr("cx", (width + 90))
+            .attr("cy", (height - 25))
+            .attr("r", 20);
+
+        nextSvg.append("text")
+            .attr("x", (width + 30))
+            .attr("y", (height + 10))
+            .style("font-size", "14px")
+            .text("BoardGameGeek Rank");
+
+        nextSvg.append("text")
+            .attr("x", (width + 78))
+            .attr("y", (height - 20))
+            .style("font-size", "14px")
+            .attr("fill", "white")
+            .text("rank");
+
+            // Scale the range of the data
+        xScaleSqRoot.domain(d3.extent(data, function(d) {
+            return d.date;
+        }));
+        yScaleSqRoot.domain([0, d3.max(counts)]);
+
+        var path = sqRootSvg.append("path")
+            .attr("d", line(data));
+
+        // Add the x Axis
+        var xAxis = sqRootSvg.append("g")
+            .attr("transform", "translate(0," + height + ")")
+            .call(d3.axisBottom(xScaleSqRoot)
+                .ticks(d3.timeMonth.every(3))
+                .tickFormat(formatTime));
+
+        // Add the y Axis
+        var yAxis = sqRootSvg.append("g")
+            .call(d3.axisLeft(yScaleSqRoot));
+
+        // Add the lines
+        sqRootSvg.append("path")
+            .datum(data)
+            .attr("fill", "none")
+            .attr("stroke", "steelblue")
+            .attr("stroke-width", 1.5)
+            .attr("d", d3.line()
+                .x(function(d) {
+                    return xScaleSqRoot(d.date)
+                })
+                .y(function(d) {
+                    return yScaleSqRoot(d['Catan=count'])
+                })
+            )
+        sqRootSvg.append("text")
+            .attr("transform", "translate(" + (width + 15) + "," + yScaleSqRoot(close['Catan']) + ")")
+            .attr("dy", ".35em")
+            .attr("text-anchor", "start")
+            .style("fill", "steelblue")
+            .text("Catan");
+
+        sqRootSvg.append("path")
+            .datum(data)
+            .attr("fill", "none")
+            .attr("stroke", "orange")
+            .attr("stroke-width", 1.5)
+            .attr("d", d3.line()
+                .x(function(d) {
+                    return xScaleSqRoot(d.date)
+                })
+                .y(function(d) {
+                    return yScaleSqRoot(d['Dominion=count'])
+                })
+            )
+        sqRootSvg.append("text")
+            .attr("transform", "translate(" + (width + 15) + "," + yScaleSqRoot(close['Dominion']) + ")")
+            .attr("dy", ".35em")
+            .attr("text-anchor", "start")
+            .style("fill", "orange")
+            .text("Dominion");
+
+        sqRootSvg.append("path")
+            .datum(data)
+            .attr("fill", "none")
+            .attr("stroke", "red")
+            .attr("stroke-width", 1.5)
+            .attr("d", d3.line()
+                .x(function(d) {
+                    return xScaleSqRoot(d.date)
+                })
+                .y(function(d) {
+                    return yScaleSqRoot(d['Codenames=count'])
+                })
+            )
+        sqRootSvg.append("text")
+            .attr("transform", "translate(" + (width + 15) + "," + yScaleSqRoot(close['Codenames']) + ")")
+            .attr("dy", ".35em")
+            .attr("text-anchor", "start")
+            .style("fill", "red")
+            .text("Codenames");
+
+        sqRootSvg.append("path")
+            .datum(data)
+            .attr("fill", "none")
+            .attr("stroke", "cyan")
+            .attr("stroke-width", 1.5)
+            .attr("d", d3.line()
+                .x(function(d) {
+                    return xScaleSqRoot(d.date)
+                })
+                .y(function(d) {
+                    return yScaleSqRoot(d['Terraforming Mars=count'])
+                })
+            )
+        sqRootSvg.append("text")
+            .attr("transform", "translate(" + (width + 15) + "," + yScaleSqRoot(close['Terraforming Mars']) + ")")
+            .attr("dy", ".35em")
+            .attr("text-anchor", "start")
+            .style("fill", "cyan")
+            .text("Terraforming Mars");
+
+        sqRootSvg.append("path")
+            .datum(data)
+            .attr("fill", "none")
+            .attr("stroke", "green")
+            .attr("stroke-width", 1.5)
+            .attr("d", d3.line()
+                .x(function(d) {
+                    return xScaleSqRoot(d.date)
+                })
+                .y(function(d) {
+                    return yScaleSqRoot(d['Gloomhaven=count'])
+                })
+            )
+        sqRootSvg.append("text")
+            .attr("transform", "translate(" + (width + 15) + "," + yScaleSqRoot(close['Gloomhaven']) + ")")
+            .attr("dy", ".35em")
+            .attr("text-anchor", "start")
+            .style("fill", "green")
+            .text("Gloomhaven");
+
+        sqRootSvg.append("path")
+            .datum(data)
+            .attr("fill", "none")
+            .attr("stroke", "yellow")
+            .attr("stroke-width", 1.5)
+            .attr("d", d3.line()
+                .x(function(d) {
+                    return xScaleSqRoot(d.date)
+                })
+                .y(function(d) {
+                    return yScaleSqRoot(d['Magic: The Gathering=count'])
+                })
+            )
+        sqRootSvg.append("text")
+            .attr("transform", "translate(" + (width + 15) + "," + yScaleSqRoot(close['Magic: The Gathering']) + ")")
+            .attr("dy", ".35em")
+            .attr("text-anchor", "start")
+            .style("fill", "yellow")
+            .text("Magic: The Gathering");
+
+        sqRootSvg.append("path")
+            .datum(data)
+            .attr("fill", "none")
+            .attr("stroke", "pink")
+            .attr("stroke-width", 1.5)
+            .attr("d", d3.line()
+                .x(function(d) {
+                    return xScaleSqRoot(d.date)
+                })
+                .y(function(d) {
+                    return yScaleSqRoot(d['Dixit=count'])
+                })
+            )
+        sqRootSvg.append("text")
+            .attr("transform", "translate(" + (width + 15) + "," + yScaleSqRoot(close['Dixit']) + ")")
+            .attr("dy", ".35em")
+            .attr("text-anchor", "start")
+            .style("fill", "pink")
+            .text("Dixit");
+
+        sqRootSvg.append("path")
+            .datum(data)
+            .attr("fill", "none")
+            .attr("stroke", "purple")
+            .attr("stroke-width", 1.5)
+            .attr("d", d3.line()
+                .x(function(d) {
+                    return xScaleSqRoot(d.date)
+                })
+                .y(function(d) {
+                    return yScaleSqRoot(d['Monopoly=count'])
+                })
+            )
+        sqRootSvg.append("text")
+            .attr("transform", "translate(" + (width + 15) + "," + yScaleSqRoot(close['Monopoly']) + ")")
+            .attr("dy", ".35em")
+            .attr("text-anchor", "start")
+            .style("fill", "purple")
+            .text("Monopoly");
+
+        //xAxis Label
+        sqRootSvg.append("text")
+            .attr("transform", "translate(" + (width / 2) +
+                " ," + (height - margin.bottom + margin.top + 70) + ")")
+            .text("Month");
+
+        //yAxis Label
+        sqRootSvg.append("text")
+            .attr("transform", "rotate(-90)")
+            .attr("x", (0 - (height / 2)))
+            .attr("y", (0 - margin.left + 15))
+            .text("Num of Ratings");
+
+        sqRootSvg.append("text")
+            .attr("x", (width / 2))
+            .attr("y", 0)
+            .attr("text-anchor", "middle")
+            .attr("font-weight", 700)
+            .text("Number of Ratings 2016-2020 with Rankings");
+
+        var lineAndDots = sqRootSvg.append("g")
+            .attr("class", "line-and-dots")
+            .attr("transform", "translate(0," + 0 + ")")
+
+        var lineAndText = sqRootSvg.append("g")
+            .attr("class", "line-and-text")
+            .attr("transform", "translate(5," + 0 + ")")
+
+        lineAndDots.selectAll("line-circle")
+            .data(data)
+            .enter().append("circle")
+            .attr("class", "data-circle")
+            .attr("r", 15)
+            .attr("cx", function(d) {
+                if (i == 0) {
+                    i += 1;
+                    return xScaleSqRoot(-10);
+                } else if (i % 3 == 0) {
+                    i += 1;
+                    return xScaleSqRoot(d.date);
+                } else {
+                    i += 1;
+                    return xScaleSqRoot(-10);
+                }
+            })
+            .attr("cy", function(d) {
+                return yScaleSqRoot(d['Catan=count']);
+            });
+
+        lineAndText.selectAll("line-text")
+            .data(data)
+            .enter().append("text")
+            .attr("class", "data-text")
+            .attr("font-size", "12px")
+            .attr("transform", function(d) {
+                if (d['Catan=rank'] > 100)
+                    return "translate(2," + 0 + ")";
+                else if (d['Catan=rank'] < 10)
+                    return "translate(8," + 0 + ")";
+                else
+                    return "translate(6," + 0 + ")";
+            })
+            .attr("x", function(d) {
+                if (i % 3 == 0) {
+                    i += 1;
+                    return xScaleSqRoot(d.date);
+                } else {
+                    i += 1;
+                    return xScaleSqRoot(-10);
+                }
+            })
+            .attr("y", function(d) {
+                return yScaleSqRoot(d['Catan=count']);
+            })
+            .style('fill', 'white')
+            .text(function(d) {
+                return d['Catan=rank'];
+            });
+
+        i = 0;
+
+        lineAndDots.selectAll("line-circle")
+            .data(data)
+            .enter().append("circle")
+            .attr("class", "data-circle")
+            .attr("r", 15)
+            .style('fill', 'red')
+            .attr("cx", function(d) {
+                if (i == 0) {
+                    i += 1;
+                    return xScaleSqRoot(-10);
+                } else if (i % 3 == 0) {
+                    i += 1;
+                    return xScaleSqRoot(d.date);
+                } else {
+                    i += 1;
+                    return xScaleSqRoot(-10);
+                }
+            })
+            .attr("cy", function(d) {
+                return yScaleSqRoot(d['Codenames=count']);
+            });
+
+        lineAndText.selectAll("line-text")
+            .data(data)
+            .enter().append("text")
+            .attr("class", "data-text")
+            .attr("font-size", "12px")
+            .attr("transform", "translate(5," + 0 + ")")
+            .attr("x", function(d) {
+                if (i % 3 == 0) {
+                    i += 1;
+                    return xScaleSqRoot(d.date);
+                } else {
+                    i += 1;
+                    return xScaleSqRoot(-10);
+                }
+            })
+            .attr("y", function(d) {
+                return yScaleSqRoot(d['Codenames=count']);
+            })
+            .style('fill', 'white')
+            .text(function(d) {
+                return d['Codenames=rank'];
+            });
+
+        i = 0;
+
+        lineAndDots.selectAll("line-circle")
+            .data(data)
+            .enter().append("circle")
+            .attr("class", "data-circle")
+            .attr("r", 15)
+            .style('fill', 'cyan')
+            .attr("cx", function(d) {
+                if (i == 0) {
+                    i += 1;
+                    return xScaleSqRoot(-10);
+                } else if (i % 3 == 0) {
+                    i += 1;
+                    return xScaleSqRoot(d.date);
+                } else {
+                    i += 1;
+                    return xScaleSqRoot(-10);
+                }
+            })
+            .attr("cy", function(d) {
+                return yScaleSqRoot(d['Terraforming Mars=count']);
+            });
+
+        lineAndText.selectAll("line-text")
+            .data(data)
+            .enter().append("text")
+            .attr("class", "data-text")
+            .attr("transform", "translate(8," + 0 + ")")
+            .attr("font-size", "12px")
+            .attr("x", function(d) {
+                if (i % 3 == 0) {
+                    i += 1;
+                    return xScaleSqRoot(d.date);
+                } else {
+                    i += 1;
+                    return xScaleSqRoot(-10);
+                }
+            })
+            .attr("y", function(d) {
+                return yScaleSqRoot(d['Terraforming Mars=count']);
+            })
+            .style('fill', 'white')
+            .text(function(d) {
+                return d['Terraforming Mars=rank'];
+            });
+
+        i = 0;
+
+        lineAndDots.selectAll("line-circle")
+            .data(data)
+            .enter().append("circle")
+            .attr("class", "data-circle")
+            .attr("r", 15)
+            .style('fill', 'green')
+            .attr("cx", function(d) {
+                if (i == 0) {
+                    i += 1;
+                    return xScaleSqRoot(-10);
+                } else if (i % 3 == 0) {
+                    i += 1;
+                    return xScaleSqRoot(d.date);
+                } else {
+                    i += 1;
+                    return xScaleSqRoot(-10);
+                }
+            })
+            .attr("cy", function(d) {
+                return yScaleSqRoot(d['Gloomhaven=count']);
+            });
+
+        lineAndText.selectAll("line-text")
+            .data(data)
+            .enter().append("text")
+            .attr("class", "data-text")
+            .attr("font-size", "12px")
+            .attr("transform", function(d) {
+                if (d['Gloomhaven=rank'] > 100)
+                    return "translate(0," + 0 + ")";
+                else if (d['Gloomhaven=rank'] < 10)
+                    return "translate(8," + 0 + ")";
+                else
+                    return "translate(6," + 0 + ")";
+            })
+            .attr("x", function(d) {
+                if (i % 3 == 0) {
+                    i += 1;
+                    return xScaleSqRoot(d.date);
+                } else {
+                    i += 1;
+                    return xScaleSqRoot(-10);
+                }
+            })
+            .attr("y", function(d) {
+                return yScaleSqRoot(d['Gloomhaven=count']);
+            })
+            .style('fill', 'white')
+            .text(function(d) {
+                return d['Gloomhaven=rank'];
+            });
+
+        sqRootSvg.append("circle")
+            .attr("cx", (width + 90))
+            .attr("cy", (height - 25))
+            .attr("r", 20);
+
+        sqRootSvg.append("text")
+            .attr("x", (width + 30))
+            .attr("y", (height + 10))
+            .style("font-size", "14px")
+            .text("BoardGameGeek Rank");
+
+        sqRootSvg.append("text")
+            .attr("x", (width + 78))
+            .attr("y", (height - 20))
+            .style("font-size", "14px")
+            .attr("fill", "white")
+            .text("rank");
+
+            // Scale the range of the data
+        xScaleLog.domain(d3.extent(data, function(d) {
+            return d.date;
+        }));
+        yScaleLog.domain([1e-6, d3.max(counts)]);
+
+        var path = logSvg.append("path")
+            .attr("d", line(data));
+
+        // Add the x Axis
+        var xAxisLog = logSvg.append("g")
+            .attr("transform", "translate(0," + height + ")")
+            .call(d3.axisBottom(xScaleLog)
+                .ticks(d3.timeMonth.every(3))
+                .tickFormat(formatTime));
+
+        // Add the y Axis
+        var yAxisLogLog = logSvg.append("g")
+            .call(d3.axisLeft(yScaleLog));
+
+        // Add the lines
+        logSvg.append("path")
+            .datum(data)
+            .attr("fill", "none")
+            .attr("stroke", "steelblue")
+            .attr("stroke-width", 1.5)
+            .attr("d", d3.line()
+                .x(function(d) {
+                    return xScaleLog(d.date)
+                })
+                .y(function(d) {
+                    return yScaleLog(d['Catan=count'])
+                })
+            )
+        logSvg.append("text")
+            .attr("transform", "translate(" + (width + 15) + "," + yScaleLog(close['Catan']) + ")")
+            .attr("dy", ".35em")
+            .attr("text-anchor", "start")
+            .style("fill", "steelblue")
+            .text("Catan");
+
+        logSvg.append("path")
+            .datum(data)
+            .attr("fill", "none")
+            .attr("stroke", "orange")
+            .attr("stroke-width", 1.5)
+            .attr("d", d3.line()
+                .x(function(d) {
+                    return xScaleLog(d.date)
+                })
+                .y(function(d) {
+                    return yScaleLog(d['Dominion=count'])
+                })
+            )
+        logSvg.append("text")
+            .attr("transform", "translate(" + (width + 15) + "," + yScaleLog(close['Dominion']) + ")")
+            .attr("dy", ".35em")
+            .attr("text-anchor", "start")
+            .style("fill", "orange")
+            .text("Dominion");
+
+        logSvg.append("path")
+            .datum(data)
+            .attr("fill", "none")
+            .attr("stroke", "red")
+            .attr("stroke-width", 1.5)
+            .attr("d", d3.line()
+                .x(function(d) {
+                    return xScaleLog(d.date)
+                })
+                .y(function(d) {
+                    return yScaleLog(d['Codenames=count'])
+                })
+            )
+        logSvg.append("text")
+            .attr("transform", "translate(" + (width + 15) + "," + yScaleLog(close['Codenames']) + ")")
+            .attr("dy", ".35em")
+            .attr("text-anchor", "start")
+            .style("fill", "red")
+            .text("Codenames");
+
+        logSvg.append("path")
+            .datum(data)
+            .attr("fill", "none")
+            .attr("stroke", "cyan")
+            .attr("stroke-width", 1.5)
+            .attr("d", d3.line()
+                .x(function(d) {
+                    return xScaleLog(d.date)
+                })
+                .y(function(d) {
+                    return yScaleLog(d['Terraforming Mars=count'])
+                })
+            )
+        logSvg.append("text")
+            .attr("transform", "translate(" + (width + 15) + "," + yScaleLog(close['Terraforming Mars']) + ")")
+            .attr("dy", ".35em")
+            .attr("text-anchor", "start")
+            .style("fill", "cyan")
+            .text("Terraforming Mars");
+
+        logSvg.append("path")
+            .datum(data)
+            .attr("fill", "none")
+            .attr("stroke", "green")
+            .attr("stroke-width", 1.5)
+            .attr("d", d3.line()
+                .x(function(d) {
+                    return xScaleLog(d.date)
+                })
+                .y(function(d) {
+                    return yScaleLog(d['Gloomhaven=count'])
+                })
+            )
+        logSvg.append("text")
+            .attr("transform", "translate(" + (width + 15) + "," + yScaleLog(close['Gloomhaven']) + ")")
+            .attr("dy", ".35em")
+            .attr("text-anchor", "start")
+            .style("fill", "green")
+            .text("Gloomhaven");
+
+        logSvg.append("path")
+            .datum(data)
+            .attr("fill", "none")
+            .attr("stroke", "yellow")
+            .attr("stroke-width", 1.5)
+            .attr("d", d3.line()
+                .x(function(d) {
+                    return xScaleLog(d.date)
+                })
+                .y(function(d) {
+                    return yScaleLog(d['Magic: The Gathering=count'])
+                })
+            )
+        logSvg.append("text")
+            .attr("transform", "translate(" + (width + 15) + "," + yScaleLog(close['Magic: The Gathering']) + ")")
+            .attr("dy", ".35em")
+            .attr("text-anchor", "start")
+            .style("fill", "yellow")
+            .text("Magic: The Gathering");
+
+        logSvg.append("path")
+            .datum(data)
+            .attr("fill", "none")
+            .attr("stroke", "pink")
+            .attr("stroke-width", 1.5)
+            .attr("d", d3.line()
+                .x(function(d) {
+                    return xScaleLog(d.date)
+                })
+                .y(function(d) {
+                    return yScaleLog(d['Dixit=count'])
+                })
+            )
+        logSvg.append("text")
+            .attr("transform", "translate(" + (width + 15) + "," + yScaleLog(close['Dixit']) + ")")
+            .attr("dy", ".35em")
+            .attr("text-anchor", "start")
+            .style("fill", "pink")
+            .text("Dixit");
+
+        logSvg.append("path")
+            .datum(data)
+            .attr("fill", "none")
+            .attr("stroke", "purple")
+            .attr("stroke-width", 1.5)
+            .attr("d", d3.line()
+                .x(function(d) {
+                    return xScaleLog(d.date)
+                })
+                .y(function(d) {
+                    return yScaleLog(d['Monopoly=count'])
+                })
+            )
+        logSvg.append("text")
+            .attr("transform", "translate(" + (width + 15) + "," + yScaleLog(close['Monopoly']) + ")")
+            .attr("dy", ".35em")
+            .attr("text-anchor", "start")
+            .style("fill", "purple")
+            .text("Monopoly");
+
+        //xAxisLog Label
+        logSvg.append("text")
+            .attr("transform", "translate(" + (width / 2) +
+                " ," + (height - margin.bottom + margin.top + 80) + ")")
+            .text("Month");
+
+        //yAxisLogLog Label
+        logSvg.append("text")
+            .attr("transform", "rotate(-90)")
+            .attr("x", (0 - (height / 2)))
+            .attr("y", (0 - margin.left + 15))
+            .text("Num of Ratings");
+
+        logSvg.append("text")
+            .attr("x", (width / 2))
+            .attr("y", -25)
+            .attr("text-anchor", "middle")
+            .attr("font-weight", 700)
+            .text("Number of Ratings 2016-2020(Log Scale)");
+
+        var lineAndDots = logSvg.append("g")
+            .attr("class", "line-and-dots")
+            .attr("transform", "translate(0," + 0 + ")")
+
+        var lineAndText = logSvg.append("g")
+            .attr("class", "line-and-text")
+            .attr("transform", "translate(5," + 0 + ")")
+
+        lineAndDots.selectAll("line-circle")
+            .data(data)
+            .enter().append("circle")
+            .attr("class", "data-circle")
+            .attr("r", 15)
+            .attr("cx", function(d) {
+                if (i == 0) {
+                    i += 1;
+                    return xScaleLog(-10);
+                } else if (i % 3 == 0) {
+                    i += 1;
+                    return xScaleLog(d.date);
+                } else {
+                    i += 1;
+                    return xScaleLog(-10);
+                }
+            })
+            .attr("cy", function(d) {
+                return yScaleLog(d['Catan=count']);
+            });
+
+        lineAndText.selectAll("line-text")
+            .data(data)
+            .enter().append("text")
+            .attr("class", "data-text")
+            .attr("font-size", "12px")
+            .attr("transform", function(d) {
+                if (d['Catan=rank'] > 100)
+                    return "translate(2," + 0 + ")";
+                else if (d['Catan=rank'] < 10)
+                    return "translate(8," + 0 + ")";
+                else
+                    return "translate(6," + 0 + ")";
+            })
+            .attr("x", function(d) {
+                if (i % 3 == 0) {
+                    i += 1;
+                    return xScaleLog(d.date);
+                } else {
+                    i += 1;
+                    return xScaleLog(-10);
+                }
+            })
+            .attr("y", function(d) {
+                return yScaleLog(d['Catan=count']);
+            })
+            .style('fill', 'white')
+            .text(function(d) {
+                return d['Catan=rank'];
+            });
+
+        i = 0;
+
+        lineAndDots.selectAll("line-circle")
+            .data(data)
+            .enter().append("circle")
+            .attr("class", "data-circle")
+            .attr("r", 15)
+            .style('fill', 'red')
+            .attr("cx", function(d) {
+                if (i == 0) {
+                    i += 1;
+                    return xScaleLog(-10);
+                } else if (i % 3 == 0) {
+                    i += 1;
+                    return xScaleLog(d.date);
+                } else {
+                    i += 1;
+                    return xScaleLog(-10);
+                }
+            })
+            .attr("cy", function(d) {
+                return yScaleLog(d['Codenames=count']);
+            });
+
+        lineAndText.selectAll("line-text")
+            .data(data)
+            .enter().append("text")
+            .attr("class", "data-text")
+            .attr("font-size", "12px")
+            .attr("transform", "translate(5," + 0 + ")")
+            .attr("x", function(d) {
+                if (i % 3 == 0) {
+                    i += 1;
+                    return xScaleLog(d.date);
+                } else {
+                    i += 1;
+                    return xScaleLog(-10);
+                }
+            })
+            .attr("y", function(d) {
+                return yScaleLog(d['Codenames=count']);
+            })
+            .style('fill', 'white')
+            .text(function(d) {
+                return d['Codenames=rank'];
+            });
+
+        i = 0;
+
+        lineAndDots.selectAll("line-circle")
+            .data(data)
+            .enter().append("circle")
+            .attr("class", "data-circle")
+            .attr("r", 15)
+            .style('fill', 'cyan')
+            .attr("cx", function(d) {
+                if (i == 0) {
+                    i += 1;
+                    return xScaleLog(-10);
+                } else if (i % 3 == 0) {
+                    i += 1;
+                    return xScaleLog(d.date);
+                } else {
+                    i += 1;
+                    return xScaleLog(-10);
+                }
+            })
+            .attr("cy", function(d) {
+                return yScaleLog(d['Terraforming Mars=count']);
+            });
+
+        lineAndText.selectAll("line-text")
+            .data(data)
+            .enter().append("text")
+            .attr("class", "data-text")
+            .attr("transform", "translate(8," + 0 + ")")
+            .attr("font-size", "12px")
+            .attr("x", function(d) {
+                if (i % 3 == 0) {
+                    i += 1;
+                    return xScaleLog(d.date);
+                } else {
+                    i += 1;
+                    return xScaleLog(-10);
+                }
+            })
+            .attr("y", function(d) {
+                return yScaleLog(d['Terraforming Mars=count']);
+            })
+            .style('fill', 'white')
+            .text(function(d) {
+                return d['Terraforming Mars=rank'];
+            });
+
+        i = 0;
+
+        lineAndDots.selectAll("line-circle")
+            .data(data)
+            .enter().append("circle")
+            .attr("class", "data-circle")
+            .attr("r", 15)
+            .style('fill', 'green')
+            .attr("cx", function(d) {
+                if (i == 0) {
+                    i += 1;
+                    return xScaleLog(-10);
+                } else if (i % 3 == 0) {
+                    i += 1;
+                    return xScaleLog(d.date);
+                } else {
+                    i += 1;
+                    return xScaleLog(-10);
+                }
+            })
+            .attr("cy", function(d) {
+                return yScaleLog(d['Gloomhaven=count']);
+            });
+
+        lineAndText.selectAll("line-text")
+            .data(data)
+            .enter().append("text")
+            .attr("class", "data-text")
+            .attr("font-size", "12px")
+            .attr("transform", function(d) {
+                if (d['Gloomhaven=rank'] > 100)
+                    return "translate(0," + 0 + ")";
+                else if (d['Gloomhaven=rank'] < 10)
+                    return "translate(8," + 0 + ")";
+                else
+                    return "translate(6," + 0 + ")";
+            })
+            .attr("x", function(d) {
+                if (i % 3 == 0) {
+                    i += 1;
+                    return xScaleLog(d.date);
+                } else {
+                    i += 1;
+                    return xScaleLog(-10);
+                }
+            })
+            .attr("y", function(d) {
+                return yScaleLog(d['Gloomhaven=count']);
+            })
+            .style('fill', 'white')
+            .text(function(d) {
+                return d['Gloomhaven=rank'];
+            });
+
+        logSvg.append("circle")
+            .attr("cx", (width + 90))
+            .attr("cy", (height - 25))
+            .attr("r", 20);
+
+        logSvg.append("text")
+            .attr("x", (width + 30))
+            .attr("y", (height + 10))
+            .style("font-size", "14px")
+            .text("BoardGameGeek Rank");
+
+        logSvg.append("text")
+            .attr("x", (width + 78))
+            .attr("y", (height - 20))
+            .style("font-size", "14px")
+            .attr("fill", "white")
+            .text("rank");
+
+    });
+</script>

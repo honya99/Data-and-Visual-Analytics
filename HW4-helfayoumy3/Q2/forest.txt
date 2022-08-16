@@ -1,0 +1,3 @@
+1. Random forests consist of multiple single trees each based on a random sample of the training data. They are typically more accurate than single decision trees
+2. 10.6 seconds
+3. 65.19%
