@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+
+  <title>Does Weather Impact Internet Search Behavior for Medical
+    Symptoms?</title>
+
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script type="text/javascript" src="lib/d3.v5.min.js"></script>
+  <script type="text/javascript" src="lib/d3-dsv.min.js"></script>
+  <script type="text/javascript" src="lib/d3-geo-projection.v2.min.js"></script>
+  <script type="text/javascript" src="lib/d3-legend.min.js"></script>
+  <script type="text/javascript" src="lib/d3-tip.min.js"></script>
+  <script type="text/javascript" src="lib/topojson.v2.min.js"></script>
+  <script type="text/javascript"
+          src="lib/d3-scale-chromatic.v2.min.js"></script>
+  <script type="text/javascript" src="lib/d3-interpolate.v2.min.js"></script>
+
+  <link rel="stylesheet" href="stylesheets/glue.min.css">
+  <link rel="stylesheet" href="stylesheets/style.css">
+  <link rel="stylesheet"
+        href="//fonts.googleapis.com/css?family=Roboto:100,300,400,500,700|Google+Sans:400,500|Product+Sans:400&amp;lang=en">
+</head>
+
+<header>
+  <!-- Add heading for the visualization -->
+  <section class="demo-header__section" id="content">
+    <div class="demo-header__content">
+      <h1 class="glue-headline glue-headline--headline-1">
+        Does Weather Impact Internet Search Behavior for Medical Symptoms?
+      </h1>
+    </div>
+  </section>
+</header>
+<body>
+<p style="text-align: justify; text-justify: inter-word;">
+  Through this project, we want to explore and analyze the impact of different
+  weather metrics like temperature, humidity, etc. on the U.S. population’s
+  internet search behavior for various medical symptoms across counties.
+</p>
+
+<p style="text-align: justify; text-justify: inter-word;">
+  We are using ARIMA (Auto Regressive Integrated Moving Average) for model
+  training and analysis. Below metrics are used for evaluation:<br>
+  <span style="font-weight:bold">RMSE (Root Mean Square Error)</span> is the
+  squared distance measure between the predicted numeric target and the actual
+  numeric answer. A model with perfect predictions would have an RMSE of 0.<br>
+  <span style="font-weight:bold">MAPE (Mean average percent error)</span>
+  expresses accuracy as a percentage. It is
+  often useful for reporting because it uses generic percentage terms.
+</p>
+
+<p style="text-align: justify; text-justify: inter-word;">On this map,
+  <span style="background: rgb(239, 106, 66);padding: 2px;">red counties</span>
+  &nbsp;have lesser RMSE than
+  <span
+      style="background: rgb(149, 209, 106);padding: 2px;">green counties</span>.
+  &nbsp;The lesser the RMSE value the better is the training model fit for the
+  selected symptom for this county.
+  <span
+      style="background: #eee;padding: 2px;">Grey counties</span>
+  have insufficient data to model and map.
+</p>
+
+<p style="text-align: justify; text-justify: inter-word;">
+  Select the symptom, and the training model to see and explore the results for
+  different counties. Double click on the county will show the model comparison
+  (using RMSE). It will also show the actual vs. predicted values for all models
+  over the period of 9 weeks for the selected county and symptom.
+</p>
+
+<!-- Dropdown -->
+<div id="symptom_options"
+     class="symptom-list">
+  <p><label for="symptom"
+            style="align: 'left'; font-weight: bold; font-size: 16px; width:50px">Searches
+    related to&nbsp;&nbsp;</label>
+    <select id="symptom" name="symptom" onchange="updateMap()"
+            class="description-select"></select></p>
+</div>
+<div id="model_options"
+     class="symptom-list">
+  <p><label for="model"
+            style="align: 'left'; font-weight: bold; font-size: 16px; width:50px">
+    Training model&nbsp;&nbsp;</label>
+    <select id="model" name="model" onchange="updateMap()"
+            class="description-select">
+      <option value="symptom_search">Predict using only search trend
+        behavior
+      </option>
+      <option value="weather_search">Predict using only weather metrics (Temp.
+        & Humidity)
+      </option>
+      <option value="weather_symptom_search"> Predict using search trends and
+        weather metrics
+      </option>
+    </select></p>
+</div>
+
+<!-- append visualization svg to this div -->
+<div id="choropleth" class="map"></div>
+<div id="bargraph" class="timeline"></div>
+<div id="linechart" class="timeline"></div>
+
+<script type="text/javascript" src="javascript/script.js"></script>
+<footer class="glue-footer glue-mod-spacer-3-top">
+  <section class="glue-footer__global">
+    <ul class="glue-footer__global-links glue-no-bullet">
+      <li class="glue-footer__global-links-list-item">
+        <a class="glue-footer__link" target="_blank"
+           href="https://console.cloud.google.com/marketplace/product/gcp-public-data-weather-source/weathersource-covid19?filter=solution-type:dataset&filter=category:covid19&id=88b8d575-e1cd-48ec-98d0-8fdf2bbddd5f">
+          Symptom Search Trends Dataset
+        </a>
+      </li>
+
+      <li class="glue-footer__global-links-list-item">
+        <a class="glue-footer__link" target="_blank"
+           href="http://goo.gle/covid19symptomdataset">
+          Weather Dataset
+        </a>
+      </li>
+    </ul>
+  </section>
+</footer>
+</body>
+</html>

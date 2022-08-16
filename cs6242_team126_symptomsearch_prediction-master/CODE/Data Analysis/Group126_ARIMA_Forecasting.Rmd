@@ -1,0 +1,1124 @@
+---
+title: "CSE 6242: Group #126 - ARIMA and Time Series Forecasting"
+output: html_notebook
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Set Up
+
+```{r}
+project_folder_path <- ""
+```
+
+
+## Libraries
+
+```{r Libraries}
+##%######################################################%##
+#                                                          #
+####                    Library Load                    ####
+#                                                          #
+##%######################################################%##
+library(tidyverse)
+
+
+libs <- c("magrittr",
+          "devtools",
+          "ggrepel",
+          "ggthemes",
+          "virdis",
+          "gridExtra",
+          "nakedpipe",
+          "stringi",
+          "caret",
+          "janitor",
+          "binr",
+          "RColorBrewer",
+          "drlib",
+          "DBI",
+          "lubridate")
+
+libs %<>% tbl_df() %>% rename("library_name"=value)
+
+for(i in 1:nrow(libs)){
+  # filter each library name
+  libs2 <- libs[i,] %>% .$library_name
+      require(libs2,character.only = TRUE)
+} # end for loop
+
+rm(i,libs,libs2)
+```
+
+## Custom Functions
+
+```{r Custom Functions}
+############################################################
+#                                                          #
+#                         To Title                         #
+#                                                          #
+############################################################
+to_title <- function(string){
+  string %>%
+    stringr::str_replace_all(pattern = "_", replacement = " ") %>%
+    tolower() %>%
+    stringi::stri_trans_totitle()
+}
+
+############################################################
+#                                                          #
+#                      TALLY PERCENT                       #
+#                                                          #
+############################################################
+tally_percent <- function(DF){
+  DF %>%
+    ungroup() %>%
+    arrange(desc(n)) %>%
+    mutate(SUM = sum(n)) %>%
+    mutate(Percent = (n/SUM) %>% scales::percent()) %>%
+    mutate(SUM = SUM %>% format(.,big.mark=",",scientific=FALSE)) %>%
+    mutate(n = n %>% format(.,big.mark=",",scientific=FALSE)) %>%
+    rename("Count" = n)
+}
+
+############################################################
+#                                                          #
+#                          NOT IN                          #
+#                                                          #
+############################################################
+
+`%ni%` <- Negate(`%in%`)
+
+##%######################################################%##
+#                                                          #
+####                 CONVERT NA TO ZERO                 ####
+#                                                          #
+##%######################################################%##
+
+NA_TO_ZERO <- function(x) {x %>% mutate_if(is.numeric,funs(replace(., is.na(.), 0))) }
+
+##%######################################################%##
+#                                                          #
+####                     NA TO MEAN                     ####
+#                                                          #
+##%######################################################%##
+
+# This will Convert all NAs to the mean value for each column
+
+NA_TO_MEAN <- function(z){
+  
+  col_list <- colnames(z) # For Order Preservation
+  
+  numeric_cols <- colnames(Filter(is.numeric,z)) # selecting the numeric cols
+  
+  NA2mean <- function(x){replace(x, is.na(x), mean(x, na.rm = TRUE))}
+  
+  Y <-
+    bind_cols(
+      tbl_df(lapply(select(z,numeric_cols),NA2mean)), # Mean Imputed Numeric Cols
+      Filter(negate(is.numeric),z) # Non-Numeric Cols (Untouched)
+    )[col_list]
+  
+  return(Y)
+}
+
+```
+
+## Data Transformation
+
+```{r Load in Data, eval=FALSE, include=FALSE}
+# Combine All Search Symptom Datasets and store as a feather file
+COVID_DF <-
+bind_rows(
+  read.csv(paste0(project_folder_path,"Data/counties_daily_2017.csv")),
+  read.csv(paste0(project_folder_path,"Data/counties_daily_2018.csv")),
+  read.csv(paste0(project_folder_path,"Data/counties_daily_2019.csv")),
+  read.csv(paste0(project_folder_path,"Data/counties_daily_2020.csv"))
+) %>%
+  mutate(country_region_code = country_region_code %>% as.factor()) %>%
+  mutate(country_region      = country_region      %>% as.factor()) %>%
+  mutate(sub_region_1        = sub_region_1        %>% as.factor()) %>%
+  mutate(sub_region_1_code   = sub_region_1_code   %>% as.factor()) %>%
+  mutate(sub_region_2        = sub_region_2        %>% as.factor()) %>%
+  mutate(date                = date                %>% as.factor()) %>%
+  mutate_if(is.character,as.numeric) %>%
+  mutate_if(is.factor,as.character) %>%
+  mutate(date = date %>% as.Date(origin="1970-01-01")) %>%
+  feather::write_feather(paste0(project_folder_path,"Data/counties_daily_2017_2020"))
+```
+
+
+```{r}
+
+if(exists("COVID_DF") == FALSE){ # Start Import
+
+# This is the symptom dataset with the years 2017-2020 combined
+COVID_DF <-
+feather::read_feather(paste0(project_folder_path,"Data/counties_daily_2017_2020")) %>%
+  mutate(sub_region_2_code = sub_region_2_code %>% as.character()) %>%
+  select(-c(country_region_code,country_region,sub_region_1_code))
+
+# This is the weather dataset for 
+weather <-
+  read.csv(paste0(project_folder_path,"/Data/county_day_history.csv")) %>%
+  mutate(date = date %>% as.character() %>% as.Date(origin="1970-01-01"))
+
+# combining weather and search symptom dataset
+cov_weather <-
+COVID_DF %>%
+  filter(year(date) %in% c(2019,2020)) %>%
+  mutate(sub_region_2_code = sub_region_2_code %>% as.integer()) %>%
+  inner_join(.,
+             weather,
+             by=c("sub_region_2_code"="county_fips_code","date"="date")
+             ) %>%
+  NA_TO_ZERO()
+
+# Removing Initial Dataframes
+rm(COVID_DF,weather)
+
+# Clearing Memory in Environment
+gc() %>% capture.output() %>% invisible()
+
+# Xref of all counties
+all_counties <-
+cov_weather %>%
+  select(sub_region_1,sub_region_2) %>%
+  distinct()
+
+# Going Forward, Our data will be changed from a daily level to a weekly level for each county.
+
+# Min Date and Week Year XREF
+date_xref <-
+  cov_weather %>%
+    select(sub_region_1,
+         sub_region_2,
+         date,
+         symptom_Pain,
+         symptom_Allergy,
+         symptom_Common_cold,
+         symptom_Cough,
+         symptom_Fever,symptom_Alcoholism,symptom_Asthma,symptom_Nausea,symptom_Chest_pain,avg_temperature_air_2m_f
+) %>%
+  mutate(week_yr = paste0(week(date)," ",year(date)))  %>%
+  group_by(week_yr) %>%
+  summarise(date = min(date)) %>%
+  ungroup() %>%
+  arrange(date)
+
+# Counties that have too many zeros to forecast
+counties_with_zero <-
+cov_weather %>%
+  select(sub_region_1,
+         sub_region_2,
+         date,
+         symptom_Pain,
+         symptom_Allergy,
+         symptom_Common_cold,
+         symptom_Cough,
+         symptom_Fever,
+         symptom_Alcoholism,
+         symptom_Asthma,
+         symptom_Nausea,
+         symptom_Chest_pain,
+         symptom_Itch,
+         avg_temperature_air_2m_f,
+         avg_humidity_specific_2m_gpkg
+) %>%
+  mutate(week_yr = paste0(week(date)," ",year(date)))  %>%
+  set_colnames(colnames(.) %>% str_remove_all("symptom_") %>% str_replace_all("avg_temperature_air_2m_f","temp")) %>%
+  group_by(sub_region_1,sub_region_2,week_yr) %>%
+  summarise_if(is.numeric,mean) %>%
+  ungroup() %>%
+  left_join(.,
+            date_xref,
+            by="week_yr"
+            ) %>%
+  select(-week_yr) %>%
+  arrange(date) %>%
+  group_by(sub_region_1,sub_region_2) %>%
+  summarise_if(is.numeric,min) %>%
+  ungroup() %>%
+  gather(3:ncol(.),key="Metric",value="Value") %>%
+  filter(Value == 0) %>%
+  select(sub_region_1,sub_region_2) %>%
+  distinct()
+
+# Removing Counties with too many zeros
+counties_to_sample <-
+  all_counties %>%
+  anti_join(.,
+            counties_with_zero,
+            by=c("sub_region_1","sub_region_2")
+            )
+dp_df <-
+  cov_weather %>%
+  select(sub_region_1,
+         sub_region_2,
+         date,
+         symptom_Pain,
+         symptom_Allergy,
+         symptom_Common_cold,
+         symptom_Cough,
+         symptom_Fever,
+         symptom_Alcoholism,
+         symptom_Asthma,
+         symptom_Nausea,
+         symptom_Chest_pain,
+         symptom_Itch,
+         avg_temperature_air_2m_f,
+         avg_humidity_specific_2m_gpkg
+) %>%
+  set_colnames(colnames(.) %>% 
+                 str_remove_all("symptom_") %>% 
+                 str_replace_all("avg_temperature_air_2m_f","temp") %>%
+                 str_replace_all("avg_humidity_specific_2m_gpkg","humidity")
+                 )  %>%
+  mutate(week_yr = paste0(week(date)," ",year(date)))  %>%
+  arrange(date) %>%
+  group_by(sub_region_1,sub_region_2,week_yr) %>%
+  summarise(date = min(date),
+            Pain = mean(Pain),
+            Allergy = mean(Allergy),
+            Common_cold = mean(Common_cold),
+            Cough = mean(Cough),
+            Fever = mean(Fever),
+            Alcoholism = mean(Alcoholism),
+            Asthma = mean(Asthma),
+            Nausea = mean(Nausea),
+            Chest_pain = mean(Chest_pain),
+            Itch = mean(Itch),
+            temp = mean(temp),
+            humidity = mean(humidity)
+  ) %>%
+  ungroup() %>%
+  select(-week_yr)
+
+} # End Import
+```
+
+```{r}
+##%######################################################%##
+#                                                          #
+####                     FUNCTIONS                      ####
+#                                                          #
+##%######################################################%##
+# Function to find ARIMA Description
+
+Arima_Descriptor <- function(x){
+  Arima_Desc =
+  arimaorder(x) %>%
+    as.character() %>%
+    str_split(.," ")
+  if(length(Arima_Desc) < 6){
+  Arima_Desc =
+    Arima_Desc %>%
+    data.frame() %>%
+    t() %>%
+    data.frame()
+    bind_cols(data.frame("Metric" = c("p","d","q"))) %>%
+    set_names(colnames(.) %>% str_trim(side="both")) 
+    
+    colnames(Arima_Desc)[1] <- "Value"
+  Arima_Description <- paste("ARIMA(",Arima_Desc$Value[1],",",
+                                      Arima_Desc$Value[2],",",
+                                      Arima_Desc$Value[3],")",sep="")
+  } else{
+  Arima_Desc =
+    Arima_Desc %>%
+    data.frame() %>%
+    t() %>%
+    data.frame()
+    bind_cols(data.frame("Metric" = c("p","d","q","P","D","Q","S"))) %>%
+    set_names(colnames(.) %>% str_trim(side="both")) 
+  colnames(Arima_Desc)[1] <- "Value"
+  Arima_Description <- paste("ARIMA(",Arima_Desc$Value[1],",",
+                                      Arima_Desc$Value[2],",",
+                                      Arima_Desc$Value[3],")(",
+                                      Arima_Desc$Value[4],",",
+                                      Arima_Desc$Value[5],",",
+                                      Arima_Desc$Value[6],")","[",
+                                      Arima_Desc$Value[7],"]",
+                             sep="")
+  }
+  return(Arima_Description)
+}
+
+##%######################################################%##
+#                                                          #
+####                  Calculating MAPE                  ####
+#                                                          #
+##%######################################################%##
+# Function to Calculate Mean Average Percent Error (MAPE)
+Calc_Mape <- function(Actual,Pred){
+  mean(abs(Pred-Actual)/Actual)
+}
+
+##%######################################################%##
+#                                                          #
+####                  Calculating RMSE                  ####
+#                                                          #
+##%######################################################%##
+# Function to Calculate Root Mean Squared Error (RMSE)
+Calc_RMSE <- function(Pred, Actual){
+  sqrt(mean((Pred - Actual)^2))
+}
+```
+
+
+```{r}
+##%######################################################%##
+#                                                          #
+####         Calculating Test Data and RMSE For         ####
+####         Each County (With a Full Dataset)          ####
+#                                                          #
+##%######################################################%##
+# Inputs Include:
+#   > Target_Var: Target Variable to Forecast
+#   > StateCounty: StateName and CountyName concatenated, separated by a comma
+# Outputs Include:
+#   List of Dataframes - Each Include:
+#     > Prediction Results, MAPE and RMSE For The Following Models:
+#       - "Search Terms & Temp + Humidity"
+#       - "Search Terms Only"
+#       - "Temp + Humidity"
+
+
+Calculating_Test_By_County <- function(Target_Var,StateCounty){
+
+    State <- sapply(strsplit(StateCounty,"[,]"),"[",1)
+    County <- sapply(strsplit(StateCounty,"[,]"),"[",2)
+      
+    train_set <-
+    dp_df %>%
+      filter(sub_region_1 == State,
+             sub_region_2 == County) 
+    
+    Name_Description <- paste0(dp_df$sub_region_2[1],", ",dp_df$sub_region_1[1])
+    
+    train_set %<>% select(-c(sub_region_1,sub_region_2))
+    
+    date_train_test <-
+      train_set %>%
+      select(date) %>%
+      arrange(date) %>%
+      mutate(order = row_number()) %>%
+      mutate(Type = ifelse(order >= 44,"Test","Train")) %>%
+      select(-order)
+    
+    test_set <-
+      train_set %>%
+      tail(10)
+    
+    train_set %<>%
+      head(43)
+    
+    ##%######################################################%##
+    #                                                          #
+    ####                R E G R E S S O R S                 ####
+    #                                                          #
+    ##%######################################################%##
+    
+    # TRAINING REGRESSORS
+    
+    target_var <- Target_Var
+    
+    train_set %<>%
+      select(-date) %>%
+      select(target_var,everything())
+    
+    x_regressors =
+    cbind(Col1 = model.matrix(~train_set %>% pull(1)),
+          Col2 =  train_set %>% pull(2),
+          Col3 =  train_set %>% pull(3),
+          Col4 =  train_set %>% pull(4),
+          Col5 =  train_set %>% pull(5),
+          Col6 =  train_set %>% pull(6),
+          Col7 =  train_set %>% pull(7),
+          Col8 =  train_set %>% pull(8),
+          Col9 =  train_set %>% pull(9),
+          Col10 = train_set %>% pull(10),
+          Col11 = train_set %>% pull(11),
+          Col12 = train_set %>% pull(12)
+    )
+    
+    x_regressors = x_regressors[,colnames(x_regressors) %ni% c("(Intercept)","train_set %>% pull(1)")]
+    
+    colnames(x_regressors) <- train_set %>% select(-target_var) %>% colnames()
+    
+    train_regressors_all = x_regressors
+    
+    train_regressors_search_only = train_regressors_all[,colnames(train_regressors_all) %ni% c("temp","humidity")]
+    
+    train_regressors_temp = train_regressors_all[,colnames(train_regressors_all) %in% c("temp","humidity")]
+    
+    ###################################################
+    
+    # TESTING REGRESSORS
+    
+    test_set %<>%
+      select(-date) %>%
+      select(target_var,everything())
+    
+    x_regressors =
+    cbind(Col1 = model.matrix(~test_set %>% pull(1)),
+          Col2 =  test_set %>% pull(2),
+          Col3 =  test_set %>% pull(3),
+          Col4 =  test_set %>% pull(4),
+          Col5 =  test_set %>% pull(5),
+          Col6 =  test_set %>% pull(6),
+          Col7 =  test_set %>% pull(7),
+          Col8 =  test_set %>% pull(8),
+          Col9 =  test_set %>% pull(9),
+          Col10 = test_set %>% pull(10),
+          Col11 = test_set %>% pull(11),
+          Col12 = test_set %>% pull(12)
+    )
+    
+    x_regressors = x_regressors[,colnames(x_regressors) %ni% c("(Intercept)","test_set %>% pull(1)")]
+    
+    colnames(x_regressors) <- test_set %>% select(-target_var) %>% colnames()
+    
+    test_regressors_all = x_regressors
+    
+    test_regressors_search_only = test_regressors_all[,colnames(test_regressors_all) %ni% c("temp","humidity")]
+    
+    test_regressors_temp = test_regressors_all[,colnames(test_regressors_all) %in% c("temp","humidity")]
+    
+    ##%######################################################%##
+    #                                                          #
+    ####                   ARIMA MODELING                   ####
+    #                                                          #
+    ##%######################################################%##
+    # Utilizing the auto.arima() function from the forecast library to find the best fitting ARIMA model for each county and predictor.
+    
+    TIME_SERIES <- train_set %>% pull(1) %>% ts(frequency=52,start=c(2019,10.1))
+    
+    library(forecast)
+    
+    # Model 1
+    # All Regressors
+    
+    ts_mod_all <-
+    auto.arima(TIME_SERIES,
+               max.p=5,
+               max.d=5,
+               max.q=5,
+               max.P=5,
+               max.D=5,
+               max.Q=5,
+               trace=FALSE,
+               seasonal=TRUE,
+               xreg=train_regressors_all)
+    
+    test_pred_all <-
+    ts_mod_all %>%
+      forecast(.,
+               nrow(test_set),
+               xreg=test_regressors_all
+               )
+    
+    # Model 2
+    # Search Terms Only
+    ts_mod_search_only <-
+    auto.arima(TIME_SERIES,
+               max.p=5,
+               max.d=5,
+               max.q=5,
+               max.P=5,
+               max.D=5,
+               max.Q=5,
+               trace=FALSE,
+               seasonal=TRUE,
+               xreg=train_regressors_search_only)
+    
+    test_pred_search_only <-
+    ts_mod_search_only %>%
+      forecast(.,
+               nrow(test_set),
+               xreg=test_regressors_search_only
+               )
+    
+    # Model 3
+    # Temperature and Humidity Only
+    
+    ts_mod_temp <-
+    auto.arima(TIME_SERIES,
+               max.p=5,
+               max.d=5,
+               max.q=5,
+               max.P=5,
+               max.D=5,
+               max.Q=5,
+               trace=FALSE,
+               seasonal=TRUE,
+               xreg=train_regressors_temp)
+    
+    test_pred_temp <-
+    ts_mod_temp %>%
+      forecast(.,
+               nrow(test_set),
+               xreg=test_regressors_temp
+               )
+    
+    ##%######################################################%##
+    #                                                          #
+    ####             Finding ARIMA Description              ####
+    #                                                          #
+    ##%######################################################%##
+    
+    test_obj <-
+    date_train_test %>%
+      filter(Type == "Test") %>%
+      select(-Type) %>%
+      bind_cols(.,
+                test_set %>%
+                  select(target_var) %>%
+                  set_colnames("Actual")
+                ) %>%
+      bind_cols(.,
+                test_pred_all %>%
+                  data.frame() %>%
+                  select(1) %>%
+                  set_colnames("All_Vars")
+                ) %>%
+      bind_cols(.,
+                test_pred_search_only %>%
+                  data.frame() %>%
+                  select(1) %>%
+                  set_colnames("Search_Only")
+                ) %>%
+      bind_cols(.,
+                test_pred_temp %>%
+                  data.frame() %>%
+                  select(1) %>%
+                  set_colnames(c("Temperature"))
+                )
+    
+    
+    
+    # Return list of all variables
+    # Calculating MAPE for model with all Variables
+    MAPE_All_Vars <- Calc_Mape(Actual=test_obj %>% pull(Actual),
+                               Pred = test_obj %>% pull(All_Vars))
+    
+    # Calculating MAPE for models with search terms only
+    MAPE_Search_Only <- Calc_Mape(Actual=test_obj %>% pull(Actual),
+                                  Pred = test_obj %>% pull(Search_Only))
+    
+    # Calculating MAPE for models with only temperature and humidity
+    MAPE_temp <- Calc_Mape(Actual=test_obj %>% pull(Actual),
+                           Pred = test_obj %>% pull(Temperature))
+    
+    # Calculating RMSE for model with all Variables
+    RMSE_All_Vars <- Calc_RMSE(Actual=test_obj %>% pull(Actual),
+                               Pred = test_obj %>% pull(All_Vars))
+    
+    # Calculating RMSE for models with search terms only
+    RMSE_Search_Only <- Calc_RMSE(Actual=test_obj %>% pull(Actual),
+                                  Pred = test_obj %>% pull(Search_Only))
+    
+    # Calculating RMSE for models with only temperature and humidity
+    RMSE_temp <- Calc_RMSE(Actual=test_obj %>% pull(Actual),
+                           Pred = test_obj %>% pull(Temperature))
+    
+    
+    test_obj %<>%
+      mutate(MAPE_All_Vars = MAPE_All_Vars,
+             MAPE_Search_Only = MAPE_Search_Only,
+             MAPE_temp = MAPE_temp,
+             RMSE_All_Vars = RMSE_All_Vars,
+             RMSE_Search_Only = RMSE_Search_Only,
+             RMSE_temp = RMSE_temp)
+    
+    # Return list of all variables
+    return_values <- test_obj
+    
+  return(return_values)
+}
+```
+
+```{r}
+# Creating a Vector of Counties that do not have any null values
+counties_vec <-
+counties_to_sample %>%
+  mutate(COMBO = paste0(sub_region_1,",",sub_region_2)) %>%
+  pull(COMBO) %>%
+  unique()
+
+# Creating dataframe comprised of every series of symptoms to predict
+Model_Results <-
+expand.grid(c("Pain", "Allergy", "Common_cold", "Cough", "Fever", 
+                 "Alcoholism", "Asthma", "Nausea", "Chest_pain", "Itch"),
+            counties_vec 
+            ) %>%
+  data.frame() %>%
+  mutate_all(.funs=as.character) %>%
+  mutate(State = sapply(strsplit(.$Var2,"[,]"),"[",1)) %>%
+  mutate(County = sapply(strsplit(.$Var2,"[,]"),"[",2)) %>%
+  select(Var1,State,County) %>%
+  set_colnames(c("Target_Variable","State","County")) %>%
+  mutate(StateCounty = paste0(State,",",County))
+```
+
+
+```{r warning=FALSE,message=FALSE}
+# Loading in Libraries For Parallel Computation
+library(purrr)
+library(furrr)
+library(parallelMap)
+
+# Assigning Workers (Number of Different Environments to Build Models)
+plan(multisession, workers = 30)
+
+# Start Time of Computation
+start_time <- Sys.time()
+
+# Creating an Empty list to store Results
+model_list <- list()
+
+# Vectorized Computation Process in Parallel Environments
+model_list <-
+furrr::future_map2(.x=Model_Results$Target_Variable,
+                   .y=Model_Results$StateCounty,
+                   .f=~Calculating_Test_By_County(Target_Var = .x,
+                                                  StateCounty =.y)
+)
+
+# Ending the Parallel Clusters
+parallelStop()
+
+# End Time of Computation
+end_time <- Sys.time()
+
+# Run Time and Models Per Minute Calculation
+cat(paste0("Ran ", scales::comma(nrow(Model_Results)*3)," models in ",difftime(end_time,start_time,units="min") %>% round(1)," mins"," (",scales::comma((nrow(Model_Results)*3)/(difftime(end_time,start_time,units="min") %>% as.numeric()))," models a minute)" ))
+```
+
+```{r}
+# Importing XREF for State,County and FIPS
+FIPS_Codes <-
+feather::read_feather(paste0(project_folder_path,"Data/counties_daily_2017_2020")) %>%
+  mutate(sub_region_2_code = sub_region_2_code %>% as.character()) %>%
+  select(-c(country_region_code,country_region,sub_region_1_code)) %>%
+  select(sub_region_1,sub_region_2,sub_region_2_code) %>%
+  distinct() %>%
+  set_colnames(c("State","County","FIPS"))
+
+# This "bind_rows" will combine all the dataframes in the list to one dataframe
+MODEL_DF <-
+bind_rows(model_list, .id = "column_label")
+
+
+Model_Results %<>%
+  mutate(column_label = row_number() %>% as.character()) %>%
+  left_join(.,
+            MODEL_DF,
+            by=c("column_label")
+            ) %>%
+  # Adding the FIPS codes for each state/county
+  left_join(.,
+            FIPS_Codes,
+            by=c("State","County")
+            ) %>%
+  select(-c(StateCounty)) %>%
+  rename("Model_Group_Number"=column_label) %>%
+  select(Model_Group_Number,date,Target_Variable,FIPS,State,County,everything()) %>%
+  rename("Actual Value" = Actual,
+         "Prediction: Search and Temp"=All_Vars,
+         "Prediction: Search Only"=Search_Only,
+         "Prediction: Temperature"=Temperature,
+         "MAPE: Search and Temp" = MAPE_All_Vars,
+         "MAPE: Search Only" = MAPE_Search_Only,
+         "MAPE: Temp" = MAPE_temp,
+         "RMSE: Search and Temp"=RMSE_All_Vars,
+         "RMSE: Search Only"=RMSE_Search_Only,
+         "RMSE: Temp"=RMSE_temp
+         )
+  
+```
+
+```{r}
+# Dumping Prediction Results
+Model_Predictions_All <-
+Model_Results %>%
+  select(Model_Group_Number,date,Target_Variable,FIPS,State,County,`Actual Value`,`Prediction: Search and Temp`,`Prediction: Search Only`,`Prediction: Temperature`) %>%
+  distinct()
+
+# Dumping Model Error Values
+Error_Output_All <-
+Model_Results %>%
+  select(-c(date,`Actual Value`,`Prediction: Search and Temp`,`Prediction: Search Only`,`Prediction: Temperature`)) %>%
+  distinct() 
+```
+
+
+
+# Predicting Counties With NA's
+
++ Finding Counties with specific Search Symptom Observations that are complete to model "Temp and Humidity" as regressors, but do not necessarily have all the other search symptoms.  
++ This group is mutually exclusive from the observations being predicted in the models above.
+```{r}
+
+non_zero_feats_df <-
+cov_weather %>%
+  select(sub_region_1,
+         sub_region_2,
+         date,
+         symptom_Pain,
+         symptom_Allergy,
+         symptom_Common_cold,
+         symptom_Cough,
+         symptom_Fever,
+         symptom_Alcoholism,
+         symptom_Asthma,
+         symptom_Nausea,
+         symptom_Chest_pain,
+         symptom_Itch,
+         avg_temperature_air_2m_f,
+         avg_humidity_specific_2m_gpkg
+) %>%
+  inner_join(.,
+             counties_with_zero,
+             by=c("sub_region_1","sub_region_2")
+             ) %>%
+  mutate(week_yr = paste0(week(date)," ",year(date)))  %>%
+  set_colnames(colnames(.) %>% str_remove_all("symptom_") %>% str_replace_all("avg_temperature_air_2m_f","temp")) %>%
+  group_by(sub_region_1,sub_region_2,week_yr) %>%
+  summarise_if(is.numeric,mean) %>%
+  ungroup() %>%
+  left_join(.,
+            date_xref,
+            by="week_yr"
+            ) %>%
+  select(-week_yr) %>%
+  arrange(date) %>%
+  select(sub_region_1,sub_region_2,date,everything()) %>%
+  select(-c(date,avg_humidity_specific_2m_gpkg,	temp)) %>%
+  gather(3:ncol(.),key="Metric",value="Value") %>%
+  group_by(sub_region_1,sub_region_2,Metric) %>%
+  summarise(Value = min(Value)) %>%
+  ungroup() %>%
+  # Filtering Value > 0: NA Values were imputed as Zero, so if they are greater than 0, then observations exist.
+  filter(Value > 0) %>%
+  select(Metric,sub_region_1,sub_region_2) %>%
+  distinct() %>%
+  # Restricting to Counties that have all the date observations (n=53)
+  inner_join(.,
+           dp_df %>%
+           group_by(sub_region_1,sub_region_2) %>%
+           tally() %>%
+           ungroup() %>%
+           filter(n == 53) %>%
+           select(-n) %>%
+           distinct(),
+           by=c("sub_region_1","sub_region_2")
+           )
+```
+
+
+```{r}
+##%######################################################%##
+#                                                          #
+####      Predicting Search Symptoms - Temperature      ####
+####          and Humidity Only as Regressors           ####
+#                                                          #
+##%######################################################%##
+# Inputs Include:
+#   > Target_Var: Target Variable to Forecast
+#   > StateCounty: StateName and CountyName concatenated, separated by a comma
+# Outputs Include:
+#   List of Dataframes - Each Include:
+#     > Prediction Results, MAPE and RMSE For The Following Models:
+#       - "Temp + Humidity"
+
+Calculating_Preds_Temp_Only <- function(Target_Var,StateCounty){
+
+    State <- sapply(strsplit(StateCounty,"[,]"),"[",1)
+    County <- sapply(strsplit(StateCounty,"[,]"),"[",2)
+      
+    train_set <-
+    dp_df %>%
+      filter(sub_region_1 == State,
+             sub_region_2 == County) 
+    
+    Name_Description <- paste0(dp_df$sub_region_2[1],", ",dp_df$sub_region_1[1])
+    
+    train_set %<>% select(-c(sub_region_1,sub_region_2))
+    
+    date_train_test <-
+      train_set %>%
+      select(date) %>%
+      arrange(date) %>%
+      mutate(order = row_number()) %>%
+      mutate(Type = ifelse(order >= 44,"Test","Train")) %>%
+      select(-order)
+    
+    test_set <-
+      train_set %>%
+      tail(10)
+    
+    train_set %<>%
+      head(43)
+    
+    ##%######################################################%##
+    #                                                          #
+    ####                R E G R E S S O R S                 ####
+    #                                                          #
+    ##%######################################################%##
+    
+    # TRAINING REGRESSORS
+    
+    target_var <- Target_Var
+    
+    train_set %<>%
+      select(-date) %>%
+      select(target_var,everything())
+    
+    x_regressors =
+    cbind(Col1 = model.matrix(~train_set %>% pull(1)),
+          Col2 =  train_set %>% pull(2),
+          Col3 =  train_set %>% pull(3),
+          Col4 =  train_set %>% pull(4),
+          Col5 =  train_set %>% pull(5),
+          Col6 =  train_set %>% pull(6),
+          Col7 =  train_set %>% pull(7),
+          Col8 =  train_set %>% pull(8),
+          Col9 =  train_set %>% pull(9),
+          Col10 = train_set %>% pull(10),
+          Col11 = train_set %>% pull(11),
+          Col12 = train_set %>% pull(12)
+    )
+    
+    x_regressors = x_regressors[,colnames(x_regressors) %ni% c("(Intercept)","train_set %>% pull(1)")]
+    
+    colnames(x_regressors) <- train_set %>% select(-target_var) %>% colnames()
+    
+    train_regressors_all = x_regressors
+    
+    train_regressors_search_only = train_regressors_all[,colnames(train_regressors_all) %ni% c("temp","humidity")]
+    
+    train_regressors_temp = train_regressors_all[,colnames(train_regressors_all) %in% c("temp","humidity")]
+    
+    ###################################################
+    
+    # TESTING REGRESSORS
+    
+    test_set %<>%
+      select(-date) %>%
+      select(target_var,everything())
+    
+    x_regressors =
+    cbind(Col1 = model.matrix(~test_set %>% pull(1)),
+          Col2 =  test_set %>% pull(2),
+          Col3 =  test_set %>% pull(3),
+          Col4 =  test_set %>% pull(4),
+          Col5 =  test_set %>% pull(5),
+          Col6 =  test_set %>% pull(6),
+          Col7 =  test_set %>% pull(7),
+          Col8 =  test_set %>% pull(8),
+          Col9 =  test_set %>% pull(9),
+          Col10 = test_set %>% pull(10),
+          Col11 = test_set %>% pull(11),
+          Col12 = test_set %>% pull(12)
+    )
+    
+    x_regressors = x_regressors[,colnames(x_regressors) %ni% c("(Intercept)","test_set %>% pull(1)")]
+    
+    colnames(x_regressors) <- test_set %>% select(-target_var) %>% colnames()
+    
+    test_regressors_all = x_regressors
+    
+    test_regressors_search_only = test_regressors_all[,colnames(test_regressors_all) %ni% c("temp","humidity")]
+    
+    test_regressors_temp = test_regressors_all[,colnames(test_regressors_all) %in% c("temp","humidity")]
+    
+    ##%######################################################%##
+    #                                                          #
+    ####                   ARIMA MODELING                   ####
+    #                                                          #
+    ##%######################################################%##
+    # Utilizing the auto.arima() function from the forecast library to find the best fitting ARIMA model for each county and predictor.
+    
+    TIME_SERIES <- train_set %>% pull(1) %>% ts(frequency=52,start=c(2019,10.1))
+    
+    library(forecast)
+
+    # Model 3
+    # Temperature and Humidity Only
+    
+    ts_mod_temp <-
+    auto.arima(TIME_SERIES,
+               max.p=5,
+               max.d=5,
+               max.q=5,
+               max.P=5,
+               max.D=5,
+               max.Q=5,
+               trace=FALSE,
+               seasonal=TRUE,
+               xreg=train_regressors_temp)
+    
+    test_pred_temp <-
+    ts_mod_temp %>%
+      forecast(.,
+               nrow(test_set),
+               xreg=test_regressors_temp
+               )
+    
+    ##%######################################################%##
+    #                                                          #
+    ####             Finding ARIMA Description              ####
+    #                                                          #
+    ##%######################################################%##
+    
+    test_obj <-
+    date_train_test %>%
+      filter(Type == "Test") %>%
+      select(-Type) %>%
+      bind_cols(.,
+                test_set %>%
+                  select(target_var) %>%
+                  set_colnames("Actual")
+                ) %>%
+      bind_cols(.,
+                test_pred_temp %>%
+                  data.frame() %>%
+                  select(1) %>%
+                  set_colnames(c("Temperature"))
+                )
+    
+    
+    
+    # Return list of all variables
+    # Calculating MAPE for models with only temperature and humidity
+    MAPE_temp <- Calc_Mape(Actual=test_obj %>% pull(Actual),
+                           Pred = test_obj %>% pull(Temperature))
+    
+    # Calculating RMSE for models with only temperature and humidity
+    RMSE_temp <- Calc_RMSE(Actual=test_obj %>% pull(Actual),
+                           Pred = test_obj %>% pull(Temperature))
+    
+    
+    test_obj %<>%
+      mutate(MAPE_temp = MAPE_temp,
+             RMSE_temp = RMSE_temp)
+    
+    # Return list of all variables
+    # return_values <- test_obj
+    return_values <- test_obj 
+
+  return(return_values)
+}
+```
+
+
+```{r}
+Model_Results_Temp <-
+non_zero_feats_df %>%
+  set_colnames(c("Target_Variable","State","County")) %>%
+  mutate(StateCounty = paste0(State,",",County))
+
+```
+
+```{r warning=FALSE,message=FALSE}
+# Loading in Libraries For Parallel Computation
+library(purrr)
+library(furrr)
+library(parallelMap)
+
+# Assigning Workers (Number of Different Environments to Build Models)
+plan(multisession, workers = 30)
+
+# Start Time of Computation
+start_time <- Sys.time()
+
+# Creating an Empty list to store Results
+model_list_temp <- list()
+
+# Vectorized Computation Process in Parallel Environments
+model_list_temp <-
+furrr::future_map2(.x=Model_Results_Temp$Target_Variable,
+                   .y=Model_Results_Temp$StateCounty,
+                   .f=~Calculating_Preds_Temp_Only(Target_Var = .x,
+                                                   StateCounty =.y)
+  
+)
+# Ending the Parallel Clusters
+parallelStop()
+
+# End Time of Computation
+end_time <- Sys.time()
+
+# Run Time and Models Per Minute Calculation
+cat(paste0("Ran ", scales::comma(nrow(Model_Results_Temp))," models in ",difftime(end_time,start_time,units="min") %>% round(1)," mins"," (",scales::comma((nrow(Model_Results_Temp))/(difftime(end_time,start_time,units="min") %>% as.numeric()))," models a minute)" ))
+```
+
+
+```{r}
+# This "bind_rows" will combine all the dataframes in the list to one dataframe
+MODEL_DF_TEMP <-
+bind_rows(model_list_temp, .id = "column_label")
+
+
+Model_Results_Temp %<>%
+  mutate(column_label = row_number() %>% as.character()) %>%
+  left_join(.,
+            MODEL_DF_TEMP,
+            by=c("column_label")
+            ) %>%
+  left_join(.,
+            FIPS_Codes,
+            by=c("State","County")
+            ) %>%
+  select(-c(StateCounty)) %>%
+  rename("Model_Group_Number"=column_label) %>%
+  select(Model_Group_Number,date,Target_Variable,FIPS,State,County,everything()) %>%
+  rename("Actual Value" = Actual,
+         "Prediction: Temperature"=Temperature,
+         "MAPE: Temp" = MAPE_temp,
+         "RMSE: Temp"=RMSE_temp
+         )
+
+# Dumping Prediction Results
+Model_Predictions_Temp <-
+Model_Results_Temp %>%
+  select(Model_Group_Number,date,Target_Variable,FIPS,State,County,`Actual Value`,`Prediction: Temperature`) %>%
+  distinct() 
+
+# Dumping Model Error Values
+Error_Output_Temp <-
+Model_Results_Temp %>%
+  select(-c(date,`Actual Value`,`Prediction: Temperature`)) %>%
+  distinct() 
+```
+
+# Finalize Results
+
+```{r}
+# Combining All Prediction Results
+Model_Predictions_All %<>%
+  bind_rows(.,
+            Model_Predictions_Temp 
+            )
+
+# Combining All Error Output
+Error_Output_All %<>%
+  bind_rows(.,
+            Error_Output_Temp
+            )
+```
+
+# Export Results
+
+```{r}
+# Export Model Predictions and Error Metrics
+
+Model_Predictions_All %>%
+  write_csv(paste0(project_folder_path,"/Output/Model_Predictions_All.csv"))
+
+Error_Output_All %>%
+  write_csv(paste0(project_folder_path,"/Output/Error_Output_All.csv"))
+```
